@@ -10,12 +10,13 @@ const pool = new Pool({
     password: process.env.DB_PASSWORD,
 });
 
-pool.on("connect", () => {
-    console.log("PostgreSQL client connected");
-});
-
-pool.on("error", (err) => {
-    console.error("Unexpected database error:", err);
+pool.on("error", (error) => {
+    console.error("Unexpected PostgreSQL error:", error);
 });
 
 module.exports = pool;
+
+//Pool -Manages database connections
+//process.env	- Reads configuration from .env
+//new Pool()	- Creates PostgreSQL connection pool
+//module.exports	- Shares connection with other backend files
