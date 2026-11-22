@@ -1,8 +1,13 @@
+
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 
+const sessionMiddleware = require("./config/session");
+
 const healthRoutes = require("./routes/healthRoutes");
+const authRoutes = require("./routes/authRoutes");
+const inquiryRoutes = require("./routes/inquiryRoutes");
 
 const app = express();
 
@@ -18,7 +23,12 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Session configuration
+app.use(sessionMiddleware);
+
 // API Routes
 app.use("/api/health", healthRoutes);
+app.use("/api/auth", authRoutes);
+app.use("/api/inquiries", inquiryRoutes);
 
 module.exports = app;
