@@ -702,7 +702,7 @@ const assignInquiry = async (req, res) => {
       [
         id,
         user.id,
-        "STAFF_ASSIGNED",
+        "ASSIGNED",
         oldStaff === null ? null : String(oldStaff),
         String(assigned_to)
       ]
