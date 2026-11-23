@@ -17,7 +17,7 @@ const login = async (req, res) => {
 
     // Find user by email
     const result = await pool.query(
-      `SELECT id, full_name, email, password_hash, role, is_active
+      `SELECT id, full_name, email, password_hash, role, specialization, is_active
        FROM users
        WHERE email = $1`,
       [email.trim().toLowerCase()]
