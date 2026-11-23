@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import ThemeToggle from "../components/ThemeToggle";
 
 type LoginResponse = {
   success?: boolean;
@@ -57,6 +58,7 @@ export default function Home() {
 
   return (
     <main className="login-page">
+      <ThemeToggle className="login-theme-toggle" />
       <section className="login-card" aria-labelledby="login-title">
         <p className="login-eyebrow">CUSTOMER INQUIRY SYSTEM</p>
         <h1 id="login-title">Welcome back</h1>

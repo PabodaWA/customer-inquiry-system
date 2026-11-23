@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import ThemeToggle from "./ThemeToggle";
 
 type Role = "ADMIN" | "INTAKE" | "HANDLER";
 
@@ -136,12 +137,15 @@ export default function RoleDashboard({ role, title }: DashboardProps) {
             <p className="dashboard-eyebrow">{role} workspace</p>
             <h1>{title}</h1>
           </div>
-          <div className="profile-chip">
-            <span className="profile-avatar">{userName.charAt(0).toUpperCase()}</span>
-            <span>
-              <strong>{userName}</strong>
-              <small>{specialization ? `${specialization} handler` : role}</small>
-            </span>
+          <div className="dashboard-header-tools">
+            <ThemeToggle className="icon-button" />
+            <div className="profile-chip">
+              <span className="profile-avatar">{userName.charAt(0).toUpperCase()}</span>
+              <span>
+                <strong>{userName}</strong>
+                <small>{specialization ? `${specialization} handler` : role}</small>
+              </span>
+            </div>
           </div>
         </header>
 
