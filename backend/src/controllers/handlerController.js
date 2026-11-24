@@ -94,6 +94,7 @@ async function resolveInquiry(req, res) {
   const { id } = req.params;
   if (!validId(id)) return res.status(400).json({ success: false, message: "Invalid inquiry ID." });
   const client = await pool.connect();
+  let committed = false;
   try {
     await client.query("BEGIN");
     const found = await client.query("SELECT * FROM inquiries WHERE id=$1 FOR UPDATE", [id]);
@@ -104,10 +105,26 @@ async function resolveInquiry(req, res) {
     const updated = await client.query("UPDATE inquiries SET status='RESOLVED', resolved_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=$1 RETURNING *", [id]);
     await client.query("UPDATE inquiry_assignments SET status='RESOLVED', resolved_at=CURRENT_TIMESTAMP WHERE id=(SELECT id FROM inquiry_assignments WHERE inquiry_id=$1 AND handler_id=$2 ORDER BY assigned_at DESC LIMIT 1)", [id, req.session.user.id]);
     await client.query("INSERT INTO inquiry_history (inquiry_id,changed_by,action,old_value,new_value) VALUES ($1,$2,'RESOLVED','IN_PROGRESS','RESOLVED')", [id, req.session.user.id]);
-    if (item.created_by) await client.query("INSERT INTO user_notifications (user_id,inquiry_id,kind,message) VALUES ($1,$2,'INQUIRY_UPDATE',$3)", [item.created_by, id, `Inquiry CN-${String(id).padStart(4, "0")} has been resolved.`]);
     await client.query("COMMIT");
+    committed = true;
+    if (item.created_by) {
+      try {
+        await pool.query(
+          "INSERT INTO user_notifications (user_id,inquiry_id,kind,message) SELECT $1,$2,'INQUIRY_UPDATE',$3 WHERE EXISTS (SELECT 1 FROM users WHERE id=$1)",
+          [item.created_by, id, `Inquiry CN-${String(id).padStart(4, "0")} has been resolved.`]
+        );
+      } catch (notificationError) {
+        console.warn("Resolve inquiry notification:", notificationError);
+      }
+    }
     return res.json({ success: true, message: "Inquiry resolved.", data: updated.rows[0] });
-  } catch (error) { await client.query("ROLLBACK"); console.error("Resolve inquiry:", error); return res.status(500).json({ success: false, message: "Could not resolve this inquiry." }); }
+  } catch (error) {
+    if (!committed) {
+      try { await client.query("ROLLBACK"); } catch (rollbackError) { console.error("Resolve inquiry rollback:", rollbackError); }
+    }
+    console.error("Resolve inquiry:", error);
+    return res.status(500).json({ success: false, message: "Could not resolve this inquiry." });
+  }
   finally { client.release(); }
 }
 

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Bell, Check, CheckCheck, ChevronRight, ClipboardList, LogOut } from "lucide-react";
+import { Bell, Check, CheckCheck, ChevronRight, ClipboardList, Coffee, LogOut } from "lucide-react";
 import ThemeToggle from "../../../../components/ThemeToggle";
 import { API_BASE, apiRequest, inquiryReference, readableLabel, type ApiResult } from "../../../../lib/admin";
 
@@ -86,7 +86,7 @@ export default function HandlerNotificationsPage() {
 
   return <main className="handler-shell">
     <aside className="handler-sidebar">
-      <div className="handler-brand"><span className="handler-brand-mark">C</span><div><strong>Coffee Ninja</strong><small>INQUIRY PORTAL</small></div></div>
+      <div className="handler-brand"><span className="handler-brand-mark"><Coffee size={21}/></span><div><small>INQUIRY PORTAL</small></div></div>
       <p className="handler-nav-label">WORKSPACE</p>
       <nav className="handler-nav" aria-label="Handler navigation">
         <Link className="handler-nav-link" href="/dashboard/handler"><ClipboardList/>Dashboard</Link>

@@ -32,13 +32,15 @@ export default function AdminNotificationsPage() {
 
   useEffect(() => {
     let active = true;
-    void loadNotifications().catch((cause) => {
-      if (active) setError(cause instanceof Error ? cause.message : "Could not load notifications.");
-    }).finally(() => { if (active) setLoading(false); });
+    const initialLoad = window.setTimeout(() => {
+      void loadNotifications().catch((cause) => {
+        if (active) setError(cause instanceof Error ? cause.message : "Could not load notifications.");
+      }).finally(() => { if (active) setLoading(false); });
+    }, 0);
     const interval = window.setInterval(() => {
       if (document.visibilityState === "visible") void loadNotifications().catch(() => undefined);
     }, 10_000);
-    return () => { active = false; window.clearInterval(interval); };
+    return () => { active = false; window.clearTimeout(initialLoad); window.clearInterval(interval); };
   }, [loadNotifications]);
 
   async function markRead(item: Notification) {

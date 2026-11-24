@@ -80,18 +80,20 @@ const createInquiry = async (req, res) => {
     return res.status(400).json({ success: false, message: "Handler assignment is managed automatically and cannot be provided." });
   }
 
+  const body = req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
   const {
     customer_name,
     contact,
     customer_email = "",
     subject,
     description,
-    category = "GENERAL",
+    category,
     evidence_files = []
-  } = req.body;
+  } = body;
   const categoryName = typeof category === "string" ? category.trim().toUpperCase().replace(/\s+/g, "_") : "";
   const normalizedContact = typeof contact === "string" ? normalizeContact(contact) : null;
-  if (typeof customer_email !== "string" || customer_email.length > 254 || (customer_email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customer_email.trim()))) {
+  const cleanEmail = typeof customer_email === "string" ? customer_email.trim() : null;
+  if (cleanEmail === null || cleanEmail.length > 254 || (cleanEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(cleanEmail))) {
     return res.status(400).json({ success: false, message: "Enter a valid customer email address." });
   }
   if (!Array.isArray(evidence_files) || evidence_files.length > 6) {
@@ -101,7 +103,7 @@ const createInquiry = async (req, res) => {
   let pictureCount = 0;
   let documentCount = 0;
   for (const file of evidence_files) {
-    if (!file || typeof file.name !== "string" || !file.name.trim() || file.name.length > 255 || typeof file.type !== "string" || !ALLOWED_EVIDENCE_TYPES.has(file.type) || typeof file.data !== "string" || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(file.data)) {
+    if (!file || typeof file.name !== "string" || !file.name.trim() || file.name.trim().length > 255 || typeof file.type !== "string" || !ALLOWED_EVIDENCE_TYPES.has(file.type) || typeof file.data !== "string" || file.data.length > Math.ceil(MAX_EVIDENCE_SIZE / 3) * 4 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(file.data)) {
       return res.status(400).json({ success: false, message: "Evidence files must be supported images or documents." });
     }
     if (file.type.startsWith("image/")) pictureCount += 1;
@@ -130,15 +132,19 @@ const createInquiry = async (req, res) => {
   }
 
   if (
+    customer_name.trim().length < 2 ||
     customer_name.trim().length > 120 ||
+    /[\u0000-\u001f\u007f]/.test(customer_name) ||
+    subject.trim().length < 3 ||
     subject.trim().length > 160 ||
+    description.trim().length < 10 ||
     description.trim().length > 5000 ||
     !normalizedContact.valid
   ) {
-    return res.status(400).json({ success: false, message: "Check the customer name, contact details, subject, and description lengths and formats." });
+    return res.status(400).json({ success: false, message: "Enter a name of 2–120 characters, a valid contact, a subject of 3–160 characters, and a description of 10–5,000 characters." });
   }
 
-  if (!categoryName) {
+  if (!categoryName || categoryName.length > 40) {
     return res.status(400).json({
       success: false,
       message: "Invalid inquiry category."
@@ -210,7 +216,7 @@ const createInquiry = async (req, res) => {
        RETURNING *`,
       [
         cleanCustomerName,
-        customer_email.trim() || null,
+        cleanEmail.toLowerCase() || null,
         contact.trim(),
         cleanSubject,
         cleanDescription,

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -46,7 +46,7 @@ export default function IntakeSettingsPage() {
   return <div className="intake-app">
     {mobileNav && <button className="intake-scrim" aria-label="Close navigation" onClick={() => setMobileNav(false)} />}
     <aside className={`intake-sidebar ${mobileNav ? "is-open" : ""}`}>
-      <Link href="/dashboard/intake" className="intake-brand"><span className="intake-brand-icon"><Coffee size={21}/></span><span><strong>Coffee Ninja</strong><small>INQUIRY DESK</small></span><button className="intake-close" aria-label="Close menu" onClick={(event) => { event.preventDefault(); setMobileNav(false); }}><X size={18}/></button></Link>
+      <Link href="/dashboard/intake" className="intake-brand"><span className="intake-brand-icon"><Coffee size={21}/></span><span><small>INQUIRY PORTAL</small></span><button className="intake-close" aria-label="Close menu" onClick={(event) => { event.preventDefault(); setMobileNav(false); }}><X size={18}/></button></Link>
       <div className="intake-nav-label">WORKSPACE</div><nav className="intake-nav" aria-label="Main navigation">
         <Link href="/dashboard/intake"><LayoutDashboard size={18}/>Dashboard</Link>
         <Link href="/dashboard/intake/inquiries"><ClipboardList size={18}/>My created inquiries</Link>
@@ -60,8 +60,8 @@ export default function IntakeSettingsPage() {
       <div className="intake-content intake-settings-content"><div className="intake-heading"><div><p className="intake-kicker">PREFERENCES</p><h1>Settings</h1><p>Manage your appearance and review your account information.</p></div></div>
         {saved && <div className="new-form-success" role="status"><Check size={17}/>Your theme preference is saved on this device.</div>}
         {error && <div className="new-form-error" role="alert"><X size={16}/>{error}</div>}
-        {loading ? <section className="new-form-card"><div className="intake-empty">Loading your account settings…</div></section> : <div className="settings-grid intake-settings-grid">
-          <section className="management-card settings-card"><div className="settings-card-heading"><span className="settings-icon"><UserRound size={19}/></span><div><h3>Intake Staff profile</h3><p>Account information from your authenticated session.</p></div></div><dl className="settings-details"><div><dt>Full name</dt><dd>{user?.fullName ?? "—"}</dd></div><div><dt>Email address</dt><dd><Mail size={14}/>{user?.email ?? "—"}</dd></div><div><dt>Role</dt><dd><ShieldCheck size={14}/>Intake Staff</dd></div></dl></section>
+        {loading ? <section className="new-form-card"><div className="intake-empty">Loading your account settingsâ€¦</div></section> : <div className="settings-grid intake-settings-grid">
+          <section className="management-card settings-card"><div className="settings-card-heading"><span className="settings-icon"><UserRound size={19}/></span><div><h3>Intake Staff profile</h3><p>Account information from your authenticated session.</p></div></div><dl className="settings-details"><div><dt>Full name</dt><dd>{user?.fullName ?? "â€”"}</dd></div><div><dt>Email address</dt><dd><Mail size={14}/>{user?.email ?? "â€”"}</dd></div><div><dt>Role</dt><dd><ShieldCheck size={14}/>Intake Staff</dd></div></dl></section>
           <section className="management-card settings-card"><div className="settings-card-heading"><span className="settings-icon"><ShieldCheck size={19}/></span><div><h3>Appearance</h3><p>Choose a theme for this browser.</p></div></div><div className="theme-setting"><div><strong>Light or dark theme</strong><span>Your preference is saved and restored automatically.</span></div><ThemeToggle className="intake-icon-button" onThemeChange={() => setSaved(true)}/></div><p className="settings-note">When no theme is selected, the portal follows your system preference.</p></section>
           <ChangePasswordForm />
         </div>}
