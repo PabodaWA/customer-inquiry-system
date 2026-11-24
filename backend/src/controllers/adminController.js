@@ -2,7 +2,6 @@ const pool = require("../config/database");
 const bcrypt = require("bcryptjs");
 
 const STAFF_ROLES = ["INTAKE", "HANDLER"];
-const SPECIALIZATIONS = ["GENERAL", "TECHNICAL", "REPAIR", "BILLING"];
 const isValidId = (value) => /^[1-9]\d*$/.test(String(value));
 const isValidEmail = (value) => typeof value === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 
@@ -32,7 +31,7 @@ async function createStaff(req, res) {
   const { full_name, email, password, role, specialization } = req.body;
   const cleanName = typeof full_name === "string" ? full_name.trim() : "";
   const cleanEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
-  const cleanSpecialization = role === "HANDLER" ? String(specialization ?? "").trim().toUpperCase() : null;
+  const cleanSpecialization = role === "HANDLER" ? normalizeCategory(specialization) : null;
 
   if (!cleanName || cleanName.length > 120 || !isValidEmail(cleanEmail)) {
     return res.status(400).json({ success: false, message: "Provide a valid staff name and email address." });
@@ -43,11 +42,11 @@ async function createStaff(req, res) {
   if (typeof password !== "string" || password.length < 10) {
     return res.status(400).json({ success: false, message: "Password must be at least 10 characters long." });
   }
-  if (role === "HANDLER" && !SPECIALIZATIONS.includes(cleanSpecialization)) {
-    return res.status(400).json({ success: false, message: "Select a valid handler specialization." });
-  }
-
   try {
+    if (role === "HANDLER") {
+      const category = await pool.query("SELECT 1 FROM inquiry_categories WHERE name = $1 AND is_active = TRUE", [cleanSpecialization]);
+      if (!category.rows.length) return res.status(400).json({ success: false, message: "Select an active inquiry category for this handler." });
+    }
     const passwordHash = await bcrypt.hash(password, 12);
     const result = await pool.query(
       `INSERT INTO users (full_name, email, password_hash, role, specialization, is_active)
@@ -75,8 +74,11 @@ async function updateStaff(req, res) {
     const staff = await pool.query("SELECT role FROM users WHERE id = $1 AND role IN ('INTAKE', 'HANDLER')", [id]);
     if (!staff.rows.length) return res.status(404).json({ success: false, message: "Staff member not found." });
     const role = staff.rows[0].role;
-    const cleanSpecialization = role === "HANDLER" ? String(specialization ?? "").trim().toUpperCase() : null;
-    if (role === "HANDLER" && !SPECIALIZATIONS.includes(cleanSpecialization)) return res.status(400).json({ success: false, message: "Select a valid handler specialization." });
+    const cleanSpecialization = role === "HANDLER" ? normalizeCategory(specialization) : null;
+    if (role === "HANDLER") {
+      const category = await pool.query("SELECT 1 FROM inquiry_categories WHERE name = $1", [cleanSpecialization]);
+      if (!category.rows.length) return res.status(400).json({ success: false, message: "Select a valid inquiry category for this handler." });
+    }
     const result = await pool.query(
       `UPDATE users SET full_name = $1, email = $2, specialization = $3
        WHERE id = $4 AND role IN ('INTAKE', 'HANDLER')

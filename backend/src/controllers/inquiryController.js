@@ -1,6 +1,7 @@
-
+﻿
 const pool = require("../config/database");
 const { assignInquiryAutomatically } = require("../services/assignmentService");
+const { getInquiryScope, canAccessInquiry } = require("../services/inquiryAccess");
 
 // ==========================================
 // CONSTANTS
@@ -25,25 +26,6 @@ const getCurrentUser = (req) => {
 // Validate positive integer ID
 const isValidId = (id) => {
   return /^[1-9]\d*$/.test(String(id));
-};
-
-
-// Check inquiry access permissions
-const canAccessInquiry = (user, inquiry) => {
-
-  if (user.role === "ADMIN") {
-    return true;
-  }
-
-  if (user.role === "INTAKE") {
-    return Number(inquiry.created_by) === Number(user.id);
-  }
-
-  if (user.role === "HANDLER") {
-    return Number(inquiry.assigned_to) === Number(user.id);
-  }
-
-  return false;
 };
 
 
@@ -299,13 +281,11 @@ const getAllInquiries = async (req, res) => {
       if (!categoryResult.rows.length) return res.status(400).json({ success: false, message: "Invalid inquiry category." });
     }
 
-    const scopeClauses = [];
-    const scopeValues = [];
-    if (user.role === "INTAKE") { scopeValues.push(user.id); scopeClauses.push(`i.created_by = $${scopeValues.length}`); }
-    else if (user.role === "HANDLER") { scopeValues.push(user.id); scopeClauses.push(`i.assigned_to = $${scopeValues.length}`); }
-    const scopeSql = scopeClauses.length ? ` AND ${scopeClauses.join(" AND ")}` : "";
-    const clauses = [...scopeClauses];
-    const values = [...scopeValues];
+    const inquiryScope = getInquiryScope(user);
+    if (!inquiryScope) return res.status(403).json({ success: false, message: "You cannot access inquiries." });
+    const scopeSql = inquiryScope.clause ? ` AND ${inquiryScope.clause}` : "";
+    const clauses = inquiryScope.clause ? [inquiryScope.clause] : [];
+    const values = [...inquiryScope.values];
     const addClause = (sql, value) => { values.push(value); clauses.push(sql.replace("?", `$${values.length}`)); };
 
     if (search?.trim()) {
@@ -345,7 +325,7 @@ const getAllInquiries = async (req, res) => {
               COUNT(*) FILTER (WHERE i.status = 'IN_PROGRESS')::int AS in_progress,
               COUNT(*) FILTER (WHERE i.status = 'RESOLVED')::int AS resolved
        FROM inquiries i WHERE TRUE ${scopeSql}`,
-      scopeValues
+      inquiryScope.values
     );
     return res.status(200).json({
       success: true,
@@ -401,9 +381,10 @@ const getInquiryById = async (req, res) => {
 
     // Find inquiry
     const result = await pool.query(
-      `SELECT i.*, assigned.full_name AS assigned_staff_name
+      `SELECT i.*, assigned.full_name AS assigned_staff_name, creator.full_name AS created_by_name
        FROM inquiries i
        LEFT JOIN users assigned ON assigned.id = i.assigned_to
+       LEFT JOIN users creator ON creator.id = i.created_by
        WHERE i.id = $1`,
       [id]
     );
@@ -456,8 +437,12 @@ const updateInquiryStatus = async (req, res) => {
 
   const { status } = req.body;
 
-  // Only ADMIN and HANDLER can update status
-  if (!["ADMIN", "HANDLER"].includes(user.role)) {
+  // Admins review status but do not change it; status changes happen through handler workflow actions.
+  if (user.role === "ADMIN") {
+    return res.status(403).json({ success: false, message: "Admins can view inquiry status but cannot change it." });
+  }
+
+  if (user.role !== "HANDLER") {
     return res.status(403).json({
       success: false,
       message: "You cannot update inquiry status."
@@ -623,197 +608,15 @@ const updateInquiryStatus = async (req, res) => {
 // ==========================================
 
 const assignInquiry = async (req, res) => {
-
   const user = getCurrentUser(req);
-
-  const { id } = req.params;
-
-  const { assigned_to } = req.body;
-
-  // Manual assignments are administrative; intake creation uses the system workflow.
   if (user.role !== "ADMIN") {
-    return res.status(403).json({
-      success: false,
-      message: "You are not allowed to assign inquiries."
-    });
+    return res.status(403).json({ success: false, message: "You are not allowed to assign inquiries." });
   }
-
-  if (
-    !isValidId(id) ||
-    !isValidId(assigned_to)
-  ) {
-    return res.status(400).json({
-      success: false,
-      message: "Valid inquiry ID and staff ID are required."
-    });
-  }
-
-  let client;
-
-  try {
-
-    client = await pool.connect();
-
-    await client.query("BEGIN");
-
-    // Find and lock inquiry
-    const inquiryResult = await client.query(
-      `SELECT *
-       FROM inquiries
-       WHERE id = $1
-       FOR UPDATE`,
-      [id]
-    );
-
-    if (inquiryResult.rows.length === 0) {
-
-      await client.query("ROLLBACK");
-
-      return res.status(404).json({
-        success: false,
-        message: "Inquiry not found."
-      });
-
-    }
-
-    const inquiry = inquiryResult.rows[0];
-
-    // Check permission
-    if (!canAccessInquiry(user, inquiry)) {
-
-      await client.query("ROLLBACK");
-
-      return res.status(403).json({
-        success: false,
-        message: "You cannot assign this inquiry."
-      });
-
-    }
-
-    // Check whether selected staff is an active HANDLER
-    const staffResult = await client.query(
-      `SELECT id
-       FROM users
-       WHERE id = $1
-       AND role = 'HANDLER'
-       AND is_active = TRUE`,
-      [assigned_to]
-    );
-
-    if (staffResult.rows.length === 0) {
-
-      await client.query("ROLLBACK");
-
-      return res.status(404).json({
-        success: false,
-        message: "Active handler not found."
-      });
-
-    }
-
-    const oldStaff = inquiry.assigned_to;
-
-    // Check existing assignment
-    if (Number(oldStaff) === Number(assigned_to)) {
-
-      await client.query("ROLLBACK");
-
-      return res.status(200).json({
-        success: true,
-        message: "This staff member is already assigned.",
-        data: inquiry
-      });
-
-    }
-
-    if (oldStaff !== null) {
-      await client.query(
-        `UPDATE inquiry_assignments SET status = 'REASSIGNED'
-         WHERE id = (SELECT id FROM inquiry_assignments WHERE inquiry_id = $1 AND handler_id = $2 ORDER BY assigned_at DESC LIMIT 1)`,
-        [id, oldStaff]
-      );
-    }
-
-    // Update assignment
-    const updated = await client.query(
-      `UPDATE inquiries
-       SET assigned_to = $1,
-           status = 'NEW',
-           assignment_status = 'ASSIGNED',
-           handler_response_status = 'WAITING',
-           decline_reason = NULL,
-           accepted_at = NULL,
-           resolved_at = NULL,
-           updated_at = CURRENT_TIMESTAMP
-       WHERE id = $2
-       RETURNING *`,
-      [assigned_to, id]
-    );
-
-    // Record assignment history
-    await client.query(
-      `INSERT INTO inquiry_history
-       (
-         inquiry_id,
-         changed_by,
-         action,
-         old_value,
-         new_value
-       )
-       VALUES ($1, $2, $3, $4, $5)`,
-      [
-        id,
-        user.id,
-        "ASSIGNED",
-        oldStaff === null ? null : String(oldStaff),
-        String(assigned_to)
-      ]
-    );
-
-    await client.query(
-      `INSERT INTO inquiry_assignments (inquiry_id, handler_id, assigned_by, status)
-       VALUES ($1, $2, $3, 'PENDING_ACCEPTANCE')`,
-      [id, assigned_to, user.id]
-    );
-    await client.query(
-      `INSERT INTO user_notifications (user_id, inquiry_id, kind, message)
-       VALUES ($1, $2, 'NEW_ASSIGNMENT', $3)`,
-      [assigned_to, id, `Inquiry CN-${String(id).padStart(4, "0")} has been assigned to you.`]
-    );
-
-    await client.query("COMMIT");
-
-    return res.status(200).json({
-      success: true,
-      message: "Inquiry assigned successfully.",
-      data: updated.rows[0]
-    });
-
-  } catch (error) {
-
-    if (client) {
-      await client.query("ROLLBACK");
-    }
-
-    console.error("Assign Inquiry Error:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Failed to assign inquiry."
-    });
-
-  } finally {
-
-    client?.release();
-
-  }
-
+  return res.status(403).json({
+    success: false,
+    message: "Only declined inquiries can be reassigned through the Declined inquiries queue."
+  });
 };
-
-
-// ==========================================
-// 7. VIEW INQUIRY HISTORY
-// ==========================================
 
 const getInquiryHistory = async (req, res) => {
 
@@ -890,14 +693,15 @@ const getInquiryHistory = async (req, res) => {
 
 const getRecentInquiryActivity = async (req, res) => {
   const user = getCurrentUser(req);
+  const inquiryScope = getInquiryScope(user);
+  if (!inquiryScope) return res.status(403).json({ success: false, message: "You cannot access inquiry activity." });
   const rawLimit = req.query.limit === undefined ? "8" : req.query.limit;
   if (typeof rawLimit !== "string" || !/^\d+$/.test(rawLimit) || Number(rawLimit) < 1 || Number(rawLimit) > 20) {
     return res.status(400).json({ success: false, message: "Activity limit must be between 1 and 20." });
   }
-  const values = [Number(rawLimit)];
-  let scope = "";
-  if (user.role === "INTAKE") { values.push(user.id); scope = `AND i.created_by = $${values.length}`; }
-  else if (user.role === "HANDLER") { values.push(user.id); scope = `AND i.assigned_to = $${values.length}`; }
+  const values = [...inquiryScope.values, Number(rawLimit)];
+  const scope = inquiryScope.clause ? `AND ${inquiryScope.clause}` : "";
+  const limitParameter = `$${values.length}`;
   try {
     const result = await pool.query(
       `SELECT h.id, h.inquiry_id, h.action, h.old_value, h.new_value, h.created_at,
@@ -909,7 +713,7 @@ const getRecentInquiryActivity = async (req, res) => {
        LEFT JOIN users actor ON actor.id = h.changed_by
        WHERE TRUE ${scope}
        ORDER BY h.created_at DESC, h.id DESC
-       LIMIT $1`,
+       LIMIT ${limitParameter}`,
       values
     );
     return res.status(200).json({ success: true, count: result.rows.length, data: result.rows });

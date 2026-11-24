@@ -84,7 +84,6 @@ export default function IntakeDashboard() {
         <Link className="current" href="/dashboard/intake"><LayoutDashboard size={18}/>Dashboard</Link>
         <Link href="/dashboard/intake/inquiries"><ClipboardList size={18}/>My created inquiries</Link>
         <Link href="/dashboard/intake/new"><FilePlus2 size={18}/>New inquiry</Link>
-        <Link href="/dashboard/intake/inquiries?status=RESOLVED"><CheckCircle2 size={18}/>Resolved inquiries</Link>
         <Link href="/notifications"><Bell size={18}/>Notifications</Link>
       </nav>
       <div className="intake-nav-label settings-label">PREFERENCES</div><nav className="intake-nav"><Link href="/dashboard/intake/settings"><Settings size={18}/>Settings</Link></nav>

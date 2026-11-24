@@ -1,83 +1,8 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { useEffect, useMemo, useState } from "react";
-import type { FormEvent } from "react";
-import { AlertCircle, Check, ClipboardList, LoaderCircle, UserRoundCheck, UserRoundX, X } from "lucide-react";
-import { apiRequest, displayDate, Inquiry, inquiryReference, readableLabel } from "../../../../lib/admin";
+// Keep old bookmarks working while removing the separate Assignments section.
+export const instant = false;
 
-type Handler = { id: number; full_name: string; role: "INTAKE" | "HANDLER"; is_active: boolean; specialization?: string | null };
-type Reassignment = { id:number; customer_name:string; subject:string; category:string; decline_reason:string; declined_at:string; previous_handler:string|null };
-
-export default function AssignmentsPage() {
-  const [inquiries, setInquiries] = useState<Inquiry[]>([]);
-  const [handlers, setHandlers] = useState<Handler[]>([]);
-  const [filter, setFilter] = useState<"ALL" | "ASSIGNED" | "UNASSIGNED">("ALL");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
-  const [assignTarget, setAssignTarget] = useState<Inquiry | null>(null);
-  const [handlerId, setHandlerId] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [declined, setDeclined] = useState<Reassignment[]>([]);
-  const [reassignTo, setReassignTo] = useState<Record<number,string>>({});
-  const [categories, setCategories] = useState<string[]>([]);
-
-  useEffect(() => {
-    let active = true;
-    Promise.all([apiRequest<Inquiry[]>("/api/inquiries"), apiRequest<Handler[]>("/api/admin/staff"), apiRequest<Reassignment[]>("/api/admin/reassignment-requests"), apiRequest<{name:string}[]>("/api/inquiries/categories")])
-      .then(([inquiryResult, staffResult, declinedResult, categoryResult]) => { if (active) { setInquiries(inquiryResult.data ?? []); setHandlers((staffResult.data ?? []).filter((staff) => staff.role === "HANDLER" && staff.is_active)); setDeclined(declinedResult.data??[]); setCategories((categoryResult.data??[]).map(c=>c.name)); } })
-      .catch((cause: unknown) => { if (active) setError(cause instanceof Error ? cause.message : "Could not load assignments."); })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
-  }, []);
-
-  const assigned = inquiries.filter((item) => item.assigned_to != null).length;
-  const unassigned = inquiries.length - assigned;
-  const rows = useMemo(() => inquiries.filter((item) => filter === "ALL" || (filter === "ASSIGNED" ? item.assigned_to != null : item.assigned_to == null)), [inquiries, filter]);
-
-  function openAssignment(inquiry: Inquiry) { setAssignTarget(inquiry); setHandlerId(""); setError(""); }
-  async function saveAssignment(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!assignTarget || !/^[1-9]\d*$/.test(handlerId)) { setError("Enter a valid positive handler ID."); return; }
-    const parsedId = Number(handlerId);
-    if (!Number.isSafeInteger(parsedId)) { setError("Handler ID is outside the supported range."); return; }
-    const verb = assignTarget.assigned_to ? "Reassign" : "Assign";
-    if (!window.confirm(`${verb} ${inquiryReference(assignTarget.id)} to active handler #${parsedId}?`)) return;
-    setSaving(true); setError(""); setNotice("");
-    try {
-      const result = await apiRequest<Inquiry>(`/api/inquiries/${assignTarget.id}/assign`, { method: "PATCH", body: JSON.stringify({ assigned_to: parsedId }) });
-      const handler = handlers.find((member) => member.id === parsedId);
-      setInquiries((current) => current.map((item) => item.id === assignTarget.id ? { ...item, ...(result.data ?? {}), assigned_to: parsedId, assigned_staff_name: handler?.full_name ?? `Staff #${parsedId}` } : item));
-      setNotice(`${inquiryReference(assignTarget.id)} assigned to ${handler?.full_name ?? `handler #${parsedId}`}.`);
-      setAssignTarget(null);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Assignment failed."); }
-    finally { setSaving(false); }
-  }
-
-  async function reassignDeclined(item:Reassignment) {
-    const target=reassignTo[item.id]; if(!target) {setError("Select an active handler for the reassignment request.");return;}
-    setSaving(true);setError("");setNotice("");
-    try { await apiRequest(`/api/admin/reassignment-requests/${item.id}/reassign`,{method:"POST",body:JSON.stringify({handler_id:Number(target)})});setDeclined(current=>current.filter(x=>x.id!==item.id));setNotice(`${inquiryReference(item.id)} reassigned successfully.`); }
-    catch(cause){setError(cause instanceof Error?cause.message:"Reassignment failed.");} finally{setSaving(false);}
-  }
-  async function changeDeclinedCategory(item:Reassignment,newCategory:string) {
-    if(newCategory===item.category)return;
-    try { await apiRequest(`/api/admin/reassignment-requests/${item.id}/category`,{method:"PATCH",body:JSON.stringify({category:newCategory})});setDeclined(current=>current.map(x=>x.id===item.id?{...x,category:newCategory}:x));setNotice(`${inquiryReference(item.id)} category updated.`); }
-    catch(cause){setError(cause instanceof Error?cause.message:"Category update failed.");}
-  }
-
-  return <div className="page-content management-page">
-    <div className="management-heading"><div><p className="eyebrow"><span className="eyebrow-dot"/> WORKLOAD</p><h2>Assignments</h2><p>Review current ownership and inquiries waiting for assignment.</p></div></div>
-    <div className="summary-grid"><article className="summary-card"><span><ClipboardList size={18}/></span><div><small>Total inquiries</small><strong>{loading ? "—" : inquiries.length}</strong></div></article><article className="summary-card"><span><UserRoundCheck size={18}/></span><div><small>Assigned</small><strong>{loading ? "—" : assigned}</strong></div></article><article className="summary-card"><span><UserRoundX size={18}/></span><div><small>Unassigned</small><strong>{loading ? "—" : unassigned}</strong></div></article></div>
-    {error && <div className="feedback error-feedback" role="alert"><AlertCircle size={16}/>{error}</div>}
-    {notice && <div className="feedback success-feedback" role="status"><Check size={16}/>{notice}<button aria-label="Dismiss message" onClick={() => setNotice("")}><X size={15}/></button></div>}
-    <section className="management-card"><div className="management-toolbar"><div><strong>Inquiry ownership</strong><p>Assignments can only be made to active handlers.</p></div><div className="filter-controls"><label><span>Show</span><select value={filter} onChange={(event) => setFilter(event.target.value as typeof filter)}><option value="ALL">All inquiries</option><option value="ASSIGNED">Assigned</option><option value="UNASSIGNED">Unassigned</option></select></label></div></div>
-      {loading ? <div className="management-state"><LoaderCircle className="state-spinner" size={22}/>Loading assignment data…</div> : !rows.length ? <div className="management-state"><ClipboardList size={23}/><strong>No inquiries in this view</strong><span>Try selecting another assignment filter.</span></div> : <div className="table-scroll"><table><thead><tr><th>REFERENCE</th><th>CUSTOMER</th><th>SUBJECT</th><th>ASSIGNED STAFF</th><th>INQUIRY STATUS</th><th>CREATED</th><th>ASSIGNMENT</th><th/></tr></thead><tbody>{rows.map((item) => <tr key={item.id}><td><span className="ref-cell">{inquiryReference(item.id)}</span></td><td><strong>{item.customer_name}</strong></td><td className="subject-cell">{item.subject}</td><td>{item.assigned_to ? <span className="assigned-cell"><span className="staff-avatar">{`S${item.assigned_to}`.slice(0,2)}</span>{item.assigned_staff_name ?? `Staff #${item.assigned_to}`}</span> : <span className="unassigned">Not assigned</span>}</td><td><span className={`status-pill status-${item.status.toLowerCase()}`}><span/>{readableLabel(item.status)}</span></td><td className="date-cell">{displayDate(item.created_at)}</td><td><span className={`assignment-state ${item.assigned_to ? "is-assigned" : "is-unassigned"}`}>{item.assigned_to ? "Assigned" : "Awaiting assignment"}</span></td><td><button className="secondary-button" onClick={() => openAssignment(item)}>{item.assigned_to ? "Reassign" : "Assign"}</button></td></tr>)}</tbody></table></div>}
-      <div className="api-limitation"><AlertCircle size={16}/><p>The server validates every assignment and only accepts users with the active HANDLER role. Staff assignments are recorded by user ID with the current staff name displayed here.</p></div>
-    </section>
-    <section className="management-card reassignment-queue"><div className="management-toolbar"><div><strong>Declined / Reassignment Requests</strong><p>Review the decline reason and send each inquiry to another active handler.</p></div><span className="record-count">{declined.length} requests</span></div>
-      {!declined.length?<div className="management-state"><ClipboardList size={23}/><strong>No declined assignments</strong><span>Returned inquiries will appear here.</span></div>:<div className="table-scroll"><table><thead><tr><th>REFERENCE / CUSTOMER</th><th>CATEGORY</th><th>PREVIOUS HANDLER</th><th>DECLINE REASON</th><th>DECLINED</th><th>REASSIGN</th></tr></thead><tbody>{declined.map(item=><tr key={item.id}><td><strong>{inquiryReference(item.id)}</strong><br/>{item.customer_name}<br/><small>{item.subject}</small></td><td><select value={item.category} onChange={e=>void changeDeclinedCategory(item,e.target.value)} aria-label={`Change category for ${inquiryReference(item.id)}`}>{categories.map(c=><option key={c} value={c}>{readableLabel(c)}</option>)}</select></td><td>{item.previous_handler??"Previous handler"}</td><td className="decline-reason-cell">{item.decline_reason}</td><td>{displayDate(item.declined_at)}</td><td><div className="reassign-controls"><select value={reassignTo[item.id]??""} onChange={e=>setReassignTo(current=>({...current,[item.id]:e.target.value}))} aria-label={`Select new handler for ${inquiryReference(item.id)}`}><option value="">Choose handler</option>{handlers.map(h=><option key={h.id} value={h.id}>{h.full_name} · {readableLabel(h.specialization??"General")}</option>)}</select><button className="primary-button" disabled={saving||!reassignTo[item.id]} onClick={()=>void reassignDeclined(item)}>Reassign</button></div></td></tr>)}</tbody></table></div>}
-    </section>
-    {assignTarget && <div className="modal-backdrop" role="presentation" onClick={() => setAssignTarget(null)}><section className="inquiry-modal" role="dialog" aria-modal="true" aria-labelledby="assignment-dialog-title" onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="panel-kicker">ASSIGN INQUIRY</span><h2 id="assignment-dialog-title">{inquiryReference(assignTarget.id)}</h2></div><button className="icon-button" onClick={() => setAssignTarget(null)} aria-label="Close assignment dialog"><X size={19}/></button></div><p className="assignment-dialog-subject">{assignTarget.subject}</p><form onSubmit={saveAssignment}><label className="form-field"><span>Active handler</span><select required value={handlerId} onChange={(event) => setHandlerId(event.target.value)}><option value="">Select an active handler</option>{handlers.map((handler) => <option key={handler.id} value={handler.id}>{handler.full_name}</option>)}</select><small>The API rechecks that the selected account is an active HANDLER.</small></label>{handlers.length === 0 && <p className="form-error">There are no active handlers available. Add or activate a handler in Staff Management first.</p>}{error && <p className="form-error" role="alert">{error}</p>}<div className="form-actions"><button type="button" className="secondary-button" onClick={() => setAssignTarget(null)}>Cancel</button><button type="submit" className="primary-button" disabled={saving || handlers.length === 0}>{saving ? "Saving…" : "Save assignment"}</button></div></form></section></div>}
-  </div>;
+export default function LegacyAssignmentsPage() {
+  redirect("/dashboard/admin/declined");
 }

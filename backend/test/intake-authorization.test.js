@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const pool = require("../src/config/database");
 const controller = require("../src/controllers/inquiryController");
+const handlerController = require("../src/controllers/handlerController");
 
 function mockResponse() {
   return {
@@ -45,6 +46,8 @@ function inquiryCreationClient({ handlers = [], workloads = [], cursor = null, f
         row = { ...row, assigned_to: values[0], assignment_status: "ASSIGNED", handler_response_status: "WAITING" };
         return { rows: [row] };
       }
+      if (sql.includes("INSERT INTO inquiry_assignments")) return { rows: [] };
+      if (sql.includes("INSERT INTO user_notifications")) return { rows: [] };
       if (sql.includes("SELECT i.*, assigned.full_name")) {
         row = { ...row, assigned_staff_name: row.assigned_to ? handlers.find((handler) => handler.id === row.assigned_to)?.full_name ?? null : null };
         return { rows: [row] };
@@ -167,6 +170,40 @@ test("intake staff cannot read inquiries or histories they did not create", asyn
   const historyResponse = mockResponse();
   await controller.getInquiryHistory(intakeRequest(), historyResponse);
   assert.equal(historyResponse.statusCode, 403);
+});
+
+test("intake staff cannot view assignment history for inquiries they did not create", async (t) => {
+  const originalQuery = pool.query;
+  const calls = [];
+  pool.query = async (sql) => {
+    calls.push(sql);
+    return { rows: [{ created_by: 7, assigned_to: 8 }] };
+  };
+  t.after(() => { pool.query = originalQuery; });
+
+  const response = mockResponse();
+  await handlerController.getAssignmentHistory(intakeRequest(), response);
+
+  assert.equal(response.statusCode, 403);
+  assert.equal(calls.length, 1);
+});
+
+test("unknown roles cannot list inquiries or view inquiry activity", async (t) => {
+  const originalQuery = pool.query;
+  pool.query = async () => { throw new Error("Database should not be queried for an unknown role."); };
+  t.after(() => { pool.query = originalQuery; });
+  const request = {
+    ...intakeRequest(),
+    session: { user: { id: 99, role: "UNKNOWN" } },
+  };
+
+  const listResponse = mockResponse();
+  await controller.getAllInquiries(request, listResponse);
+  assert.equal(listResponse.statusCode, 403);
+
+  const activityResponse = mockResponse();
+  await controller.getRecentInquiryActivity(request, activityResponse);
+  assert.equal(activityResponse.statusCode, 403);
 });
 
 test("inquiry listing applies the authenticated intake owner's scope and safe pagination", async (t) => {

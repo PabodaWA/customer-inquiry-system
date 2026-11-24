@@ -6,6 +6,7 @@ const router = express.Router();
 const {
   login,
   getMe,
+  changePassword,
   logout,
 } = require("../controllers/authController");
 
@@ -16,6 +17,7 @@ router.post("/login", login);
 
 // Get current logged-in user
 router.get("/me", requireAuth, getMe);
+router.patch("/password", requireAuth, changePassword);
 
 // Logout
 router.post("/logout", requireAuth, logout);

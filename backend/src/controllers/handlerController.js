@@ -1,4 +1,5 @@
 const pool = require("../config/database");
+const { canAccessInquiry } = require("../services/inquiryAccess");
 const validId = (id) => /^[1-9]\d*$/.test(String(id));
 
 async function getDashboard(req, res) {
@@ -100,9 +101,9 @@ async function getAssignmentHistory(req, res) {
   const { id } = req.params;
   if (!validId(id)) return res.status(400).json({ success: false, message: "Invalid inquiry ID." });
   try {
-    const visible = await pool.query("SELECT assigned_to FROM inquiries WHERE id=$1", [id]);
+    const visible = await pool.query("SELECT created_by,assigned_to FROM inquiries WHERE id=$1", [id]);
     if (!visible.rows.length) return res.status(404).json({ success: false, message: "Inquiry not found." });
-    if (req.session.user.role === "HANDLER" && Number(visible.rows[0].assigned_to) !== Number(req.session.user.id)) return res.status(403).json({ success: false, message: "You cannot view this inquiry." });
+    if (!canAccessInquiry(req.session.user, visible.rows[0])) return res.status(403).json({ success: false, message: "You cannot view this inquiry." });
     const result = await pool.query(`SELECT a.*, h.full_name AS handler_name, u.full_name AS assigned_by_name FROM inquiry_assignments a JOIN users h ON h.id=a.handler_id LEFT JOIN users u ON u.id=a.assigned_by WHERE a.inquiry_id=$1 ORDER BY a.assigned_at DESC`, [id]);
     return res.json({ success: true, data: result.rows });
   } catch (error) { console.error("Assignment history:", error); return res.status(500).json({ success: false, message: "Could not retrieve assignment history." }); }

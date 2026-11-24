@@ -103,6 +103,28 @@ const getMe = (req, res) => {
   });
 };
 
+const changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body ?? {};
+    if (typeof currentPassword !== "string" || typeof newPassword !== "string") {
+      return res.status(400).json({ success: false, message: "Current and new passwords are required." });
+    }
+    if (newPassword.length < 10) {
+      return res.status(400).json({ success: false, message: "New password must be at least 10 characters." });
+    }
+    const result = await pool.query("SELECT password_hash FROM users WHERE id = $1 AND is_active = TRUE", [req.session.user.id]);
+    if (!result.rows.length || !(await bcrypt.compare(currentPassword, result.rows[0].password_hash))) {
+      return res.status(400).json({ success: false, message: "Current password is incorrect." });
+    }
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    await pool.query("UPDATE users SET password_hash = $1 WHERE id = $2", [passwordHash, req.session.user.id]);
+    return res.status(200).json({ success: true, message: "Password updated successfully." });
+  } catch (error) {
+    console.error("Change password error:", error);
+    return res.status(500).json({ success: false, message: "Unable to update password." });
+  }
+};
+
 // Logout
 const logout = (req, res) => {
   req.session.destroy((err) => {
@@ -125,5 +147,6 @@ const logout = (req, res) => {
 module.exports = {
   login,
   getMe,
+  changePassword,
   logout,
 };

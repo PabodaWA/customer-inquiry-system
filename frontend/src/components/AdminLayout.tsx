@@ -6,8 +6,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   ChevronDown, ChevronRight, ClipboardList, Coffee, LayoutDashboard, LogOut,
-  PanelLeftClose, PanelLeftOpen, Settings, ShieldCheck, Tags, UserRoundCheck,
-  Users, X, CircleHelp,
+  PanelLeftClose, PanelLeftOpen, Settings, ShieldCheck, Tags,
+  Users, X, CircleHelp, UserRoundX,
 } from "lucide-react";
 import ThemeToggle from "./ThemeToggle";
 
@@ -20,9 +20,9 @@ const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
 const navigation = [
   { label: "Dashboard", href: "/dashboard/admin", icon: LayoutDashboard },
   { label: "All inquiries", href: "/dashboard/admin/inquiries", icon: ClipboardList },
+  { label: "Declined inquiries", href: "/dashboard/admin/declined", icon: UserRoundX },
   { label: "Staff management", href: "/dashboard/admin/staff", icon: Users },
   { label: "Category management", href: "/dashboard/admin/categories", icon: Tags },
-  { label: "Assignments", href: "/dashboard/admin/assignments", icon: UserRoundCheck },
 ];
 
 function getPageTitle(pathname: string) {
@@ -31,7 +31,7 @@ function getPageTitle(pathname: string) {
     "/dashboard/admin/inquiries": "All inquiries",
     "/dashboard/admin/staff": "Staff management",
     "/dashboard/admin/categories": "Category management",
-    "/dashboard/admin/assignments": "Assignments",
+    "/dashboard/admin/declined": "Declined inquiries",
     "/dashboard/admin/settings": "Settings",
   };
   return pages[pathname] ?? "Dashboard";

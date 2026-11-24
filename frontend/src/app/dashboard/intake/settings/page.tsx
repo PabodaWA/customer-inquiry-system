@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Bell, Check, ChevronDown, ChevronRight, ClipboardList, Coffee, FilePlus2, LayoutDashboard, LogOut, Mail, Menu, Settings as SettingsIcon, ShieldCheck, UserRound, X } from "lucide-react";
 import ThemeToggle from "../../../../components/ThemeToggle";
+import ChangePasswordForm from "../../../../components/ChangePasswordForm";
 import "../intake.css";
 
 type User = { id: number; fullName: string; email: string; role: string };
@@ -60,8 +61,9 @@ export default function IntakeSettingsPage() {
         {saved && <div className="new-form-success" role="status"><Check size={17}/>Your theme preference is saved on this device.</div>}
         {error && <div className="new-form-error" role="alert"><X size={16}/>{error}</div>}
         {loading ? <section className="new-form-card"><div className="intake-empty">Loading your account settings…</div></section> : <div className="settings-grid intake-settings-grid">
-          <section className="management-card settings-card"><div className="settings-card-heading"><span className="settings-icon"><UserRound size={19}/></span><div><h3>Intake Staff profile</h3><p>Account information from your authenticated session.</p></div></div><dl className="settings-details"><div><dt>Full name</dt><dd>{user?.fullName ?? "—"}</dd></div><div><dt>Email address</dt><dd><Mail size={14}/>{user?.email ?? "—"}</dd></div><div><dt>Role</dt><dd><ShieldCheck size={14}/>Intake Staff</dd></div></dl><p className="settings-note">Profile editing and password changes aren’t supported by the current authentication API.</p></section>
+          <section className="management-card settings-card"><div className="settings-card-heading"><span className="settings-icon"><UserRound size={19}/></span><div><h3>Intake Staff profile</h3><p>Account information from your authenticated session.</p></div></div><dl className="settings-details"><div><dt>Full name</dt><dd>{user?.fullName ?? "—"}</dd></div><div><dt>Email address</dt><dd><Mail size={14}/>{user?.email ?? "—"}</dd></div><div><dt>Role</dt><dd><ShieldCheck size={14}/>Intake Staff</dd></div></dl></section>
           <section className="management-card settings-card"><div className="settings-card-heading"><span className="settings-icon"><ShieldCheck size={19}/></span><div><h3>Appearance</h3><p>Choose a theme for this browser.</p></div></div><div className="theme-setting"><div><strong>Light or dark theme</strong><span>Your preference is saved and restored automatically.</span></div><ThemeToggle className="intake-icon-button" onThemeChange={() => setSaved(true)}/></div><p className="settings-note">When no theme is selected, the portal follows your system preference.</p></section>
+          <ChangePasswordForm />
         </div>}
       </div>
     </main>
