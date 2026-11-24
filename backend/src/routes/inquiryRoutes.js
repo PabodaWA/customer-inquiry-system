@@ -7,6 +7,8 @@ const router = express.Router();
 const {
   createInquiry,
   getAllInquiries,
+  getInquiryCategories,
+  getRecentInquiryActivity,
   getInquiryById,
   updateInquiryStatus,
   assignInquiry,
@@ -15,12 +17,24 @@ const {
 
 // Import authentication middleware
 const { requireAuth } = require("../middleware/authMiddleware");
+const { authorizeRoles } = require("../middleware/authMiddleware");
+const { getDashboard, getMyDeclinedInquiries, acceptInquiry, declineInquiry, resolveInquiry, getAssignmentHistory } = require("../controllers/handlerController");
 
 // Protect all inquiry routes
 router.use(requireAuth);
 
 // 1. Create new inquiry
 router.post("/", createInquiry);
+
+// 2. Read-only category options for authenticated inquiry forms and filters
+router.get("/categories", getInquiryCategories);
+router.get("/activity", getRecentInquiryActivity);
+router.get("/handler-dashboard", authorizeRoles("HANDLER"), getDashboard);
+router.get("/handler-dashboard/declined", authorizeRoles("HANDLER"), getMyDeclinedInquiries);
+router.get("/:id/assignments", getAssignmentHistory);
+router.post("/:id/accept", authorizeRoles("HANDLER"), acceptInquiry);
+router.post("/:id/decline", authorizeRoles("HANDLER"), declineInquiry);
+router.post("/:id/resolve", authorizeRoles("HANDLER"), resolveInquiry);
 
 // 2. View all inquiries + Search + Filter
 router.get("/", getAllInquiries);

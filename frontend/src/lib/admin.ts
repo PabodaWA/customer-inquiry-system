@@ -10,6 +10,8 @@ export type Inquiry = {
   status: InquiryStatus;
   assigned_to?: number | null;
   assigned_staff_name?: string | null;
+  assignment_status?: "PENDING" | "ASSIGNED";
+  handler_response_status?: "WAITING" | "ACCEPTED" | "DECLINED" | "NOT_REQUIRED" | "UNKNOWN";
   created_at: string;
   updated_at?: string;
   created_by?: number;
