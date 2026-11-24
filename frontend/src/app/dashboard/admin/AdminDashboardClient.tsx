@@ -9,6 +9,7 @@ type Inquiry = {
   id: number;
   customer_name: string;
   subject: string;
+  description?: string;
   category: string;
   status: "NEW" | "IN_PROGRESS" | "RESOLVED";
   created_at: string;
@@ -97,7 +98,7 @@ export default function AdminDashboard() {
         </section>
         <footer className="page-footer"><span>© {now?.getFullYear() ?? ""} Coffee Ninja</span><span>Customer care, brewed better.</span></footer>
       </div>
-      {selectedInquiry && <div className="modal-backdrop" role="presentation" onClick={() => setSelectedInquiry(null)}><section className="inquiry-modal" role="dialog" aria-modal="true" aria-labelledby="inquiry-modal-title" onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="panel-kicker">INQUIRY DETAILS</span><h2 id="inquiry-modal-title">CN-{String(selectedInquiry.id).padStart(4, "0")}</h2></div><button className="icon-button" onClick={() => setSelectedInquiry(null)} aria-label="Close inquiry details"><X size={19}/></button></div><div className="modal-customer"><span className="customer-avatar">{initials(selectedInquiry.customer_name)}</span><div><strong>{selectedInquiry.customer_name}</strong><small>Customer</small></div></div><dl className="detail-list"><div><dt>Subject</dt><dd>{selectedInquiry.subject}</dd></div><div><dt>Category</dt><dd>{selectedInquiry.category}</dd></div><div><dt>Assigned to</dt><dd>{selectedInquiry.assigned_to ? `Staff #${selectedInquiry.assigned_to}` : "Unassigned"}</dd></div><div><dt>Status</dt><dd>{selectedInquiry.status.replace("_", " ")}</dd></div><div><dt>Created</dt><dd>{formatDate(selectedInquiry.created_at)}</dd></div></dl><button className="modal-done" onClick={() => setSelectedInquiry(null)}>Done</button></section></div>}
+      {selectedInquiry && <div className="modal-backdrop" role="presentation" onClick={() => setSelectedInquiry(null)}><section className="inquiry-modal" role="dialog" aria-modal="true" aria-labelledby="inquiry-modal-title" onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="panel-kicker">INQUIRY DETAILS</span><h2 id="inquiry-modal-title">CN-{String(selectedInquiry.id).padStart(4, "0")}</h2></div><button className="icon-button" onClick={() => setSelectedInquiry(null)} aria-label="Close inquiry details"><X size={19}/></button></div><div className="modal-customer"><span className="customer-avatar">{initials(selectedInquiry.customer_name)}</span><div><strong>{selectedInquiry.customer_name}</strong><small>Customer</small></div></div><p className="admin-inquiry-description">{selectedInquiry.description || "No description provided."}</p><dl className="detail-list"><div><dt>Subject</dt><dd>{selectedInquiry.subject}</dd></div><div><dt>Category</dt><dd>{selectedInquiry.category}</dd></div><div><dt>Assigned to</dt><dd>{selectedInquiry.assigned_to ? `Staff #${selectedInquiry.assigned_to}` : "Unassigned"}</dd></div><div><dt>Status</dt><dd>{selectedInquiry.status.replace("_", " ")}</dd></div><div><dt>Created</dt><dd>{formatDate(selectedInquiry.created_at)}</dd></div></dl><button className="modal-done" onClick={() => setSelectedInquiry(null)}>Done</button></section></div>}
     </>
   );
 }
