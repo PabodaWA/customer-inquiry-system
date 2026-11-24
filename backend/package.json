@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "node --test test/intake-authorization.test.js test/assignmentService.test.js test/handlerWorkflow.test.js",
+    "test": "node --test test/intake-authorization.test.js test/assignmentService.test.js test/handlerWorkflow.test.js test/inquiryEvidenceAccess.test.js",
     "db:migrate": "node scripts/migrate.js",
     "dev": "nodemon src/server.js",
     "start": "node src/server.js"

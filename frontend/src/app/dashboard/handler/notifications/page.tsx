@@ -8,6 +8,7 @@ import ThemeToggle from "../../../../components/ThemeToggle";
 import { API_BASE, apiRequest, inquiryReference, readableLabel, type ApiResult } from "../../../../lib/admin";
 import { useLogout } from "../../../../lib/useLogout";
 import LogoutFeedback from "../../../../components/LogoutFeedback";
+import { markNotificationRead } from "../../../../lib/notificationState.mjs";
 
 type User = { fullName: string; email: string; role: string; specialization?: string };
 type Notification = { id: number; inquiry_id: number | null; kind: string; message: string; created_at: string; read_at: string | null };
@@ -69,7 +70,7 @@ export default function HandlerNotificationsPage() {
     try {
       await apiRequest(`/api/notifications/${item.id}/read`, { method: "PATCH" });
       const readAt = new Date().toISOString();
-      setNotifications((current) => current.map((notice) => notice.id === item.id ? { ...notice, read_at: readAt } : notice));
+      setNotifications((current) => markNotificationRead(current, item.id, readAt));
       setUnreadCount((count) => Math.max(0, count - 1));
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not mark this notification as read."); }
     finally { setSaving(false); }
