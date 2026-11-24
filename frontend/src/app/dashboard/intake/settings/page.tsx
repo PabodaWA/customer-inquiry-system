@@ -51,7 +51,7 @@ export default function IntakeSettingsPage() {
         <Link href="/dashboard/intake"><LayoutDashboard size={18}/>Dashboard</Link>
         <Link href="/dashboard/intake/inquiries"><ClipboardList size={18}/>My created inquiries</Link>
         <Link href="/dashboard/intake/new"><FilePlus2 size={18}/>New inquiry</Link>
-        <Link href="/notifications"><Bell size={18}/>Notifications</Link>
+        <Link href="/dashboard/intake/notifications"><Bell size={18}/>Notifications</Link>
       </nav><div className="intake-nav-label settings-label">PREFERENCES</div><nav className="intake-nav"><Link className="current" aria-current="page" href="/dashboard/intake/settings"><SettingsIcon size={18}/>Settings</Link></nav>
       <div className="intake-sidebar-profile"><span className="intake-avatar">{initials(user?.fullName ?? "Staff")}</span><span className="intake-profile-name"><strong>{user?.fullName ?? "Intake Staff"}</strong><small>Intake Staff</small></span><button className="intake-logout" aria-label="Log out" onClick={() => void logout()}><LogOut size={17}/></button></div>
     </aside>

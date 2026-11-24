@@ -1,9 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Activity, ArrowDownRight, ArrowUpRight, Bell, ChevronRight, CircleHelp, ClipboardList, Eye, MoreHorizontal, Search, ShieldCheck, UserRoundCog, X } from "lucide-react";
 import { useAdminLayout } from "../../../components/AdminLayout";
+import { useInquiryRefresh } from "../../../lib/useInquiryRefresh";
+import InquiryEvidence from "../../../components/InquiryEvidence";
+import { apiRequest } from "../../../lib/admin";
 
 type Inquiry = {
   id: number;
@@ -15,6 +18,9 @@ type Inquiry = {
   created_at: string;
   assigned_to?: number | null;
   assigned_staff_name?: string | null;
+  contact?: string;
+  customer_email?: string | null;
+  evidence_files?: { id: number; file_name: string; mime_type: string; data_url: string }[];
 };
 type StaffSummary = { is_active: boolean };
 
@@ -37,6 +43,23 @@ export default function AdminDashboard() {
   const [error, setError] = useState("");
   const [selectedInquiry, setSelectedInquiry] = useState<Inquiry | null>(null);
   const [now, setNow] = useState<Date | null>(null);
+
+  const refreshInquiries = useCallback(async () => {
+    try {
+      const response = await fetch(`${apiUrl}/api/inquiries`, { credentials: "include" });
+      const result = await response.json() as { success?: boolean; data?: Inquiry[]; message?: string };
+      if (!response.ok || !result.success) throw new Error(result.message ?? "Could not refresh inquiries.");
+      const currentInquiries = result.data ?? [];
+      setInquiries(currentInquiries);
+      setSelectedInquiry((current) => {
+        const latest = currentInquiries.find((item) => item.id === current?.id);
+        return latest && current ? { ...current, ...latest } : current;
+      });
+    } catch (cause) {
+      console.error("Could not refresh inquiry data.", cause);
+    }
+  }, []);
+  useInquiryRefresh(refreshInquiries);
 
   useEffect(() => {
     const clockTimer = window.setTimeout(() => setNow(new Date()), 0);
@@ -76,6 +99,14 @@ export default function AdminDashboard() {
     resolved: inquiries.filter((item) => item.status === "RESOLVED").length,
   };
 
+  async function showInquiryDetails(inquiry: Inquiry) {
+    setSelectedInquiry(inquiry);
+    try {
+      const result = await apiRequest<Inquiry>(`/api/inquiries/${inquiry.id}`);
+      setSelectedInquiry(result.data ?? inquiry);
+    } catch (cause) { console.error("Could not load inquiry details.", cause); }
+  }
+
   return (
     <>
       <div className="page-content">
@@ -93,12 +124,12 @@ export default function AdminDashboard() {
         <section className="team-strip" id="staff"><div className="team-icon"><UserRoundCog size={19}/></div><div className="team-copy"><strong>Active staff</strong><span>Enabled intake staff and handlers.</span></div><div className="team-count">{activeStaff ?? "—"} <small>active members</small></div></section>
 
         <section className="inquiries-panel" id="recent-inquiries"><div className="panel-head"><div><div className="panel-kicker">INBOX</div><h3>Recent inquiries <span className="result-count">{loading ? "" : inquiries.length}</span></h3><p>Keep track of the latest customer conversations.</p></div><Link className="view-all" href="/dashboard/admin/inquiries">View all inquiries <ChevronRight size={15}/></Link></div>
-          {error ? <div className="table-state"><span className="state-icon"><CircleHelp size={20}/></span><strong>We couldn’t load the dashboard</strong><p>{error}</p><button onClick={() => window.location.reload()}>Try again</button></div> : loading ? <div className="table-state"><span className="loading-ring"/><p>Loading your inquiry data...</p></div> : filteredInquiries.length === 0 ? <div className="table-state"><span className="state-icon"><Search size={20}/></span><strong>{search ? "No matching inquiries" : "No inquiries yet"}</strong><p>{search ? "Try a different search term." : "New customer requests will appear here."}</p></div> : <div className="table-scroll"><table><thead><tr><th>REFERENCE</th><th>CUSTOMER</th><th>SUBJECT</th><th>CATEGORY</th><th>ASSIGNED TO</th><th>STATUS</th><th>CREATED</th><th/></tr></thead><tbody>{filteredInquiries.map((inquiry) => <tr key={inquiry.id}><td><span className="ref-cell">CN-{String(inquiry.id).padStart(4, "0")}</span></td><td><span className="customer-cell"><span className="customer-avatar">{initials(inquiry.customer_name)}</span><strong>{inquiry.customer_name}</strong></span></td><td className="subject-cell">{inquiry.subject}</td><td><span className="category-chip">{inquiry.category.toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase())}</span></td><td>{inquiry.assigned_to ? <span className="assigned-cell"><span className="staff-avatar">{`S${inquiry.assigned_to}`.slice(0,2)}</span>{inquiry.assigned_staff_name ?? `Staff #${inquiry.assigned_to}`}</span> : <span className="unassigned">Unassigned</span>}</td><td><span className={`status-pill status-${inquiry.status.toLowerCase()}`}><span/>{inquiry.status.replace("_", " ").toLowerCase().replace(/^\w/, (letter) => letter.toUpperCase())}</span></td><td className="date-cell">{formatDate(inquiry.created_at)}</td><td><button className="row-action" onClick={() => setSelectedInquiry(inquiry)} aria-label={`View inquiry CN-${inquiry.id}`}><Eye size={16}/></button></td></tr>)}</tbody></table></div>}
+          {error ? <div className="table-state"><span className="state-icon"><CircleHelp size={20}/></span><strong>We couldn’t load the dashboard</strong><p>{error}</p><button onClick={() => window.location.reload()}>Try again</button></div> : loading ? <div className="table-state"><span className="loading-ring"/><p>Loading your inquiry data...</p></div> : filteredInquiries.length === 0 ? <div className="table-state"><span className="state-icon"><Search size={20}/></span><strong>{search ? "No matching inquiries" : "No inquiries yet"}</strong><p>{search ? "Try a different search term." : "New customer requests will appear here."}</p></div> : <div className="table-scroll"><table><thead><tr><th>REFERENCE</th><th>CUSTOMER</th><th>SUBJECT</th><th>CATEGORY</th><th>ASSIGNED TO</th><th>STATUS</th><th>CREATED</th><th/></tr></thead><tbody>{filteredInquiries.map((inquiry) => <tr key={inquiry.id}><td><span className="ref-cell">CN-{String(inquiry.id).padStart(4, "0")}</span></td><td><span className="customer-cell"><span className="customer-avatar">{initials(inquiry.customer_name)}</span><strong>{inquiry.customer_name}</strong></span></td><td className="subject-cell">{inquiry.subject}</td><td><span className="category-chip">{inquiry.category.toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase())}</span></td><td>{inquiry.assigned_to ? <span className="assigned-cell"><span className="staff-avatar">{`S${inquiry.assigned_to}`.slice(0,2)}</span>{inquiry.assigned_staff_name ?? `Staff #${inquiry.assigned_to}`}</span> : <span className="unassigned">Unassigned</span>}</td><td><span className={`status-pill status-${inquiry.status.toLowerCase()}`}><span/>{inquiry.status.replace("_", " ").toLowerCase().replace(/^\w/, (letter) => letter.toUpperCase())}</span></td><td className="date-cell">{formatDate(inquiry.created_at)}</td><td><button className="row-action" onClick={() => void showInquiryDetails(inquiry)} aria-label={`View inquiry CN-${inquiry.id}`}><Eye size={16}/></button></td></tr>)}</tbody></table></div>}
           <div className="panel-footer"><span>Showing <strong>{filteredInquiries.length}</strong> of <strong>{inquiries.length}</strong> inquiries</span><button aria-label="More inquiry options"><MoreHorizontal size={19}/></button></div>
         </section>
         <footer className="page-footer"><span>© {now?.getFullYear() ?? ""} Coffee Ninja</span><span>Customer care, brewed better.</span></footer>
       </div>
-      {selectedInquiry && <div className="modal-backdrop" role="presentation" onClick={() => setSelectedInquiry(null)}><section className="inquiry-modal" role="dialog" aria-modal="true" aria-labelledby="inquiry-modal-title" onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="panel-kicker">INQUIRY DETAILS</span><h2 id="inquiry-modal-title">CN-{String(selectedInquiry.id).padStart(4, "0")}</h2></div><button className="icon-button" onClick={() => setSelectedInquiry(null)} aria-label="Close inquiry details"><X size={19}/></button></div><div className="modal-customer"><span className="customer-avatar">{initials(selectedInquiry.customer_name)}</span><div><strong>{selectedInquiry.customer_name}</strong><small>Customer</small></div></div><p className="admin-inquiry-description">{selectedInquiry.description || "No description provided."}</p><dl className="detail-list"><div><dt>Subject</dt><dd>{selectedInquiry.subject}</dd></div><div><dt>Category</dt><dd>{selectedInquiry.category}</dd></div><div><dt>Assigned to</dt><dd>{selectedInquiry.assigned_to ? `Staff #${selectedInquiry.assigned_to}` : "Unassigned"}</dd></div><div><dt>Status</dt><dd>{selectedInquiry.status.replace("_", " ")}</dd></div><div><dt>Created</dt><dd>{formatDate(selectedInquiry.created_at)}</dd></div></dl><button className="modal-done" onClick={() => setSelectedInquiry(null)}>Done</button></section></div>}
+      {selectedInquiry && <div className="modal-backdrop" role="presentation" onClick={() => setSelectedInquiry(null)}><section className="inquiry-modal" role="dialog" aria-modal="true" aria-labelledby="inquiry-modal-title" onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="panel-kicker">INQUIRY DETAILS</span><h2 id="inquiry-modal-title">CN-{String(selectedInquiry.id).padStart(4, "0")}</h2></div><button className="icon-button" onClick={() => setSelectedInquiry(null)} aria-label="Close inquiry details"><X size={19}/></button></div><div className="modal-customer"><span className="customer-avatar">{initials(selectedInquiry.customer_name)}</span><div><strong>{selectedInquiry.customer_name}</strong><small>{selectedInquiry.contact || "Contact unavailable"}{selectedInquiry.customer_email ? `  ·  ${selectedInquiry.customer_email}` : ""}</small></div></div><p className="admin-inquiry-description">{selectedInquiry.description || "No description provided."}</p><InquiryEvidence files={selectedInquiry.evidence_files}/><dl className="detail-list"><div><dt>Subject</dt><dd>{selectedInquiry.subject}</dd></div><div><dt>Category</dt><dd>{selectedInquiry.category}</dd></div><div><dt>Assigned to</dt><dd>{selectedInquiry.assigned_to ? `Staff #${selectedInquiry.assigned_to}` : "Unassigned"}</dd></div><div><dt>Status</dt><dd>{selectedInquiry.status.replace("_", " ")}</dd></div><div><dt>Created</dt><dd>{formatDate(selectedInquiry.created_at)}</dd></div></dl><button className="modal-done" onClick={() => setSelectedInquiry(null)}>Done</button></section></div>}
     </>
   );
 }

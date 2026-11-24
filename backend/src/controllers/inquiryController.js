@@ -12,6 +12,11 @@ const VALID_STATUSES = [
   "IN_PROGRESS",
   "RESOLVED"
 ];
+const ALLOWED_EVIDENCE_TYPES = new Set([
+  "image/jpeg", "image/png", "image/webp", "application/pdf", "text/plain",
+  "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+]);
+const MAX_EVIDENCE_SIZE = 5 * 1024 * 1024;
 
 // ==========================================
 // HELPER FUNCTIONS
@@ -26,6 +31,25 @@ const getCurrentUser = (req) => {
 // Validate positive integer ID
 const isValidId = (id) => {
   return /^[1-9]\d*$/.test(String(id));
+};
+
+const normalizeContact = (contact) => {
+  const trimmedContact = contact.trim();
+  if (trimmedContact.includes("@")) {
+    const email = trimmedContact.toLowerCase();
+    return {
+      type: "email",
+      value: email,
+      valid: email.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email),
+    };
+  }
+
+  const digits = trimmedContact.replace(/\D/g, "");
+  return {
+    type: "phone",
+    value: digits,
+    valid: /^\+?[\d\s().-]{7,24}$/.test(trimmedContact) && digits.length >= 7 && digits.length <= 15,
+  };
 };
 
 
@@ -59,12 +83,34 @@ const createInquiry = async (req, res) => {
   const {
     customer_name,
     contact,
+    customer_email = "",
     subject,
     description,
-    category = "GENERAL"
+    category = "GENERAL",
+    evidence_files = []
   } = req.body;
   const categoryName = typeof category === "string" ? category.trim().toUpperCase().replace(/\s+/g, "_") : "";
-  const contactDigits = typeof contact === "string" ? contact.replace(/\D/g, "") : "";
+  const normalizedContact = typeof contact === "string" ? normalizeContact(contact) : null;
+  if (typeof customer_email !== "string" || customer_email.length > 254 || (customer_email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customer_email.trim()))) {
+    return res.status(400).json({ success: false, message: "Enter a valid customer email address." });
+  }
+  if (!Array.isArray(evidence_files) || evidence_files.length > 6) {
+    return res.status(400).json({ success: false, message: "Attach up to 3 pictures and 3 documents." });
+  }
+  const filesToSave = [];
+  let pictureCount = 0;
+  let documentCount = 0;
+  for (const file of evidence_files) {
+    if (!file || typeof file.name !== "string" || !file.name.trim() || file.name.length > 255 || typeof file.type !== "string" || !ALLOWED_EVIDENCE_TYPES.has(file.type) || typeof file.data !== "string" || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(file.data)) {
+      return res.status(400).json({ success: false, message: "Evidence files must be supported images or documents." });
+    }
+    if (file.type.startsWith("image/")) pictureCount += 1;
+    else documentCount += 1;
+    if (pictureCount > 3 || documentCount > 3) return res.status(400).json({ success: false, message: "Attach up to 3 pictures and 3 documents." });
+    const buffer = Buffer.from(file.data, "base64");
+    if (!buffer.length || buffer.length > MAX_EVIDENCE_SIZE) return res.status(400).json({ success: false, message: "Each evidence file must be 5 MB or smaller." });
+    filesToSave.push({ name: file.name.trim(), type: file.type, buffer });
+  }
 
   // Validate required fields
   if (
@@ -87,10 +133,9 @@ const createInquiry = async (req, res) => {
     customer_name.trim().length > 120 ||
     subject.trim().length > 160 ||
     description.trim().length > 5000 ||
-    !/^\+?[\d\s().-]{7,24}$/.test(contact.trim()) ||
-    contactDigits.length < 7 || contactDigits.length > 15
+    !normalizedContact.valid
   ) {
-    return res.status(400).json({ success: false, message: "Check the customer name, contact number, subject, and description lengths and formats." });
+    return res.status(400).json({ success: false, message: "Check the customer name, contact details, subject, and description lengths and formats." });
   }
 
   if (!categoryName) {
@@ -117,11 +162,41 @@ const createInquiry = async (req, res) => {
       return res.status(400).json({ success: false, message: "Select an active inquiry category." });
     }
 
+    const cleanSubject = subject.trim();
+    const cleanDescription = description.trim();
+    const cleanCustomerName = customer_name.trim();
+    const normalizedCustomerName = cleanCustomerName.toLowerCase();
+    const duplicateLockKey = JSON.stringify([normalizedCustomerName, normalizedContact.value, cleanSubject, cleanDescription]);
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [duplicateLockKey]);
+
+    const contactComparison = normalizedContact.type === "email"
+      ? "LOWER(BTRIM(contact)) = $2"
+      : "REGEXP_REPLACE(contact, '[^0-9]', '', 'g') = $2";
+    const duplicateResult = await client.query(
+      `SELECT id
+       FROM inquiries
+       WHERE LOWER(BTRIM(customer_name)) = $1
+         AND ${contactComparison}
+         AND subject = $3
+         AND description = $4
+         AND status IN ('NEW', 'IN_PROGRESS')
+       LIMIT 1`,
+      [normalizedCustomerName, normalizedContact.value, cleanSubject, cleanDescription]
+    );
+    if (duplicateResult.rows.length) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({
+        success: false,
+        message: "This inquiry already exists and is currently being handled. You can submit the same inquiry again once the existing inquiry has been resolved.",
+      });
+    }
+
     // Insert unassigned first. The assignment service runs in this transaction.
     const result = await client.query(
       `INSERT INTO inquiries
        (
          customer_name,
+         customer_email,
          contact,
          subject,
          description,
@@ -131,19 +206,27 @@ const createInquiry = async (req, res) => {
          assignment_status,
          handler_response_status
        )
-       VALUES ($1, $2, $3, $4, $5, $6, 'NEW', 'PENDING', 'NOT_REQUIRED')
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'NEW', 'PENDING', 'NOT_REQUIRED')
        RETURNING *`,
       [
-        customer_name.trim(),
+        cleanCustomerName,
+        customer_email.trim() || null,
         contact.trim(),
-        subject.trim(),
-        description.trim(),
+        cleanSubject,
+        cleanDescription,
         categoryName,
         user.id
       ]
     );
 
     let inquiry = result.rows[0];
+
+    for (const file of filesToSave) {
+      await client.query(
+        "INSERT INTO inquiry_evidence (inquiry_id, file_name, mime_type, file_data) VALUES ($1, $2, $3, $4)",
+        [inquiry.id, file.name, file.type, file.buffer]
+      );
+    }
 
     // Save inquiry creation history
     await client.query(
@@ -405,6 +488,18 @@ const getInquiryById = async (req, res) => {
         message: "You are not allowed to view this inquiry."
       });
     }
+
+    const evidenceResult = await pool.query(
+      `SELECT id, file_name, mime_type, file_data
+       FROM inquiry_evidence WHERE inquiry_id = $1 ORDER BY id`,
+      [id]
+    );
+    inquiry.evidence_files = evidenceResult.rows.map((file) => ({
+      id: file.id,
+      file_name: file.file_name,
+      mime_type: file.mime_type,
+      data_url: `data:${file.mime_type};base64,${file.file_data.toString("base64")}`,
+    }));
 
     return res.status(200).json({
       success: true,

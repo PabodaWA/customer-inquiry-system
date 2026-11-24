@@ -22,7 +22,7 @@ app.use(
   })
 );
 
-app.use(express.json());
+app.use(express.json({ limit: "42mb" }));
 app.use(express.urlencoded({ extended: true }));
 
 // Session configuration

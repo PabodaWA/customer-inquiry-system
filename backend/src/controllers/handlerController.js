@@ -18,14 +18,25 @@ async function getMyDeclinedInquiries(req, res) {
   const handlerId = req.session.user.id;
   try {
     const result = await pool.query(
-      `SELECT i.id, i.customer_name, i.subject, i.category,
-              a.decline_reason, a.declined_at
+      `SELECT i.*, a.decline_reason, a.declined_at, a.assigned_at
        FROM inquiry_assignments a
        JOIN inquiries i ON i.id=a.inquiry_id
        WHERE a.handler_id=$1 AND a.status='DECLINED'
        ORDER BY a.declined_at DESC, a.id DESC`,
       [handlerId]
     );
+    for (const inquiry of result.rows) {
+      const evidence = await pool.query(
+        "SELECT id, file_name, mime_type, file_data FROM inquiry_evidence WHERE inquiry_id=$1 ORDER BY id",
+        [inquiry.id]
+      );
+      inquiry.evidence_files = evidence.rows.map((file) => ({
+        id: file.id,
+        file_name: file.file_name,
+        mime_type: file.mime_type,
+        data_url: `data:${file.mime_type};base64,${file.file_data.toString("base64")}`,
+      }));
+    }
     return res.json({ success: true, data: result.rows, count: result.rows.length });
   } catch (error) {
     console.error("Handler declined inquiries:", error);
@@ -47,6 +58,7 @@ async function acceptInquiry(req, res) {
     const updated = await client.query(`UPDATE inquiries SET status='IN_PROGRESS', handler_response_status='ACCEPTED', accepted_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=$1 RETURNING *`, [id]);
     await client.query(`UPDATE inquiry_assignments SET status='ACCEPTED', accepted_at=CURRENT_TIMESTAMP WHERE id=(SELECT id FROM inquiry_assignments WHERE inquiry_id=$1 AND handler_id=$2 ORDER BY assigned_at DESC LIMIT 1)`, [id, req.session.user.id]);
     await client.query("INSERT INTO inquiry_history (inquiry_id,changed_by,action,old_value,new_value) VALUES ($1,$2,'ACCEPTED','NEW','IN_PROGRESS')", [id, req.session.user.id]);
+    if (inquiry.created_by) await client.query("INSERT INTO user_notifications (user_id,inquiry_id,kind,message) VALUES ($1,$2,'INQUIRY_UPDATE',$3)", [inquiry.created_by, id, `Inquiry CN-${String(id).padStart(4, "0")} was accepted and is now in progress.`]);
     await client.query("COMMIT");
     return res.json({ success: true, message: "Inquiry accepted.", data: updated.rows[0] });
   } catch (error) { await client.query("ROLLBACK"); console.error("Accept inquiry:", error); return res.status(500).json({ success: false, message: "Could not accept this inquiry." }); }
@@ -71,6 +83,7 @@ async function declineInquiry(req, res) {
     await client.query("INSERT INTO inquiry_history (inquiry_id,changed_by,action,old_value,new_value) VALUES ($1,$2,'DECLINED',$3,$4)", [id, req.session.user.id, String(req.session.user.id), reason]);
     const admins = await client.query("SELECT id FROM users WHERE role='ADMIN' AND is_active=TRUE");
     for (const admin of admins.rows) await client.query("INSERT INTO user_notifications (user_id,inquiry_id,kind,message) VALUES ($1,$2,'DECLINED_ASSIGNMENT',$3)", [admin.id, id, `Inquiry CN-${String(id).padStart(4, "0")} was declined: ${reason}`]);
+    if (inquiry.created_by) await client.query("INSERT INTO user_notifications (user_id,inquiry_id,kind,message) VALUES ($1,$2,'INQUIRY_UPDATE',$3)", [inquiry.created_by, id, `The handler returned inquiry CN-${String(id).padStart(4, "0")} for reassignment.`]);
     await client.query("COMMIT");
     return res.json({ success: true, message: "Inquiry returned to the admin reassignment queue." });
   } catch (error) { await client.query("ROLLBACK"); console.error("Decline inquiry:", error); return res.status(500).json({ success: false, message: "Could not decline this inquiry." }); }
@@ -91,6 +104,7 @@ async function resolveInquiry(req, res) {
     const updated = await client.query("UPDATE inquiries SET status='RESOLVED', resolved_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=$1 RETURNING *", [id]);
     await client.query("UPDATE inquiry_assignments SET status='RESOLVED', resolved_at=CURRENT_TIMESTAMP WHERE id=(SELECT id FROM inquiry_assignments WHERE inquiry_id=$1 AND handler_id=$2 ORDER BY assigned_at DESC LIMIT 1)", [id, req.session.user.id]);
     await client.query("INSERT INTO inquiry_history (inquiry_id,changed_by,action,old_value,new_value) VALUES ($1,$2,'RESOLVED','IN_PROGRESS','RESOLVED')", [id, req.session.user.id]);
+    if (item.created_by) await client.query("INSERT INTO user_notifications (user_id,inquiry_id,kind,message) VALUES ($1,$2,'INQUIRY_UPDATE',$3)", [item.created_by, id, `Inquiry CN-${String(id).padStart(4, "0")} has been resolved.`]);
     await client.query("COMMIT");
     return res.json({ success: true, message: "Inquiry resolved.", data: updated.rows[0] });
   } catch (error) { await client.query("ROLLBACK"); console.error("Resolve inquiry:", error); return res.status(500).json({ success: false, message: "Could not resolve this inquiry." }); }

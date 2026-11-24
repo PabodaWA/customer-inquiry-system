@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  ChevronDown, ChevronRight, ClipboardList, Coffee, LayoutDashboard, LogOut,
+  Bell, ChevronDown, ChevronRight, ClipboardList, Coffee, LayoutDashboard, LogOut,
   PanelLeftClose, PanelLeftOpen, Settings, ShieldCheck, Tags,
   Users, X, CircleHelp, UserRoundX,
 } from "lucide-react";
@@ -20,6 +20,7 @@ const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
 const navigation = [
   { label: "Dashboard", href: "/dashboard/admin", icon: LayoutDashboard },
   { label: "All inquiries", href: "/dashboard/admin/inquiries", icon: ClipboardList },
+  { label: "Notifications", href: "/dashboard/admin/notifications", icon: Bell },
   { label: "Declined inquiries", href: "/dashboard/admin/declined", icon: UserRoundX },
   { label: "Staff management", href: "/dashboard/admin/staff", icon: Users },
   { label: "Category management", href: "/dashboard/admin/categories", icon: Tags },
@@ -29,6 +30,7 @@ function getPageTitle(pathname: string) {
   const pages: Record<string, string> = {
     "/dashboard/admin": "Dashboard",
     "/dashboard/admin/inquiries": "All inquiries",
+    "/dashboard/admin/notifications": "Notifications",
     "/dashboard/admin/staff": "Staff management",
     "/dashboard/admin/categories": "Category management",
     "/dashboard/admin/declined": "Declined inquiries",

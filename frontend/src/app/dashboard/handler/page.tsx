@@ -5,14 +5,17 @@ import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { Activity, Bell, Check, CheckCircle2, ChevronDown, CircleAlert, ClipboardList, Clock3, LogOut, Moon, Search, Settings, Sun, UserRound, X } from "lucide-react";
 import { apiRequest, displayDate, inquiryReference, readableLabel, type ApiResult } from "../../../lib/admin";
+import { useInquiryRefresh } from "../../../lib/useInquiryRefresh";
+import InquiryEvidence from "../../../components/InquiryEvidence";
 
 type Inquiry = {
   id: number; customer_name: string; contact: string; subject: string; description: string;
   category: string; status: "NEW" | "IN_PROGRESS" | "RESOLVED"; handler_response_status: string;
-  created_at: string; assigned_at?: string;
+  created_at: string; assigned_at?: string; customer_email?: string | null;
+  evidence_files?: { id: number; file_name: string; mime_type: string; data_url: string }[];
 };
 type Stats = { total: number; pending: number; in_progress: number; resolved: number; declined: number };
-type DeclinedInquiry = { id: number; customer_name: string; subject: string; category: string; decline_reason: string; declined_at: string };
+type DeclinedInquiry = Inquiry & { decline_reason: string; declined_at: string };
 type User = { id: number; fullName: string; email: string; role: string; specialization?: string };
 type Event = { id: number; action: string; new_value: string | null; created_at: string; changed_by_name: string };
 type Notification = { id: number; inquiry_id: number | null; kind: string; message: string; created_at: string; read_at: string | null };
@@ -59,6 +62,23 @@ export default function HandlerDashboard() {
     finally { setLoading(false); }
   }, [router]);
 
+  const refreshInquiries = useCallback(async () => {
+    if (!user) return;
+    try {
+      const result = await apiRequest<Inquiry[]>("/api/inquiries/handler-dashboard") as ApiResult<Inquiry[]> & { stats?: Stats };
+      const currentItems = result.data ?? [];
+      setItems(currentItems);
+      setStats(result.stats ?? { total: 0, pending: 0, in_progress: 0, resolved: 0, declined: 0 });
+      setDetail((current) => {
+        const latest = currentItems.find((item) => item.id === current?.id);
+        return latest && current ? { ...current, ...latest } : current;
+      });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not refresh your inquiries.");
+    }
+  }, [user]);
+  useInquiryRefresh(refreshInquiries);
+
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
@@ -94,8 +114,18 @@ export default function HandlerDashboard() {
   }
   async function openDetail(item: Inquiry) {
     setDetail(item); setTimeline([]);
-    try { const result = await apiRequest<Event[]>(`/api/inquiries/${item.id}/history`); setTimeline(result.data ?? []); }
+    try {
+      const [details, history] = await Promise.all([apiRequest<Inquiry>(`/api/inquiries/${item.id}`), apiRequest<Event[]>(`/api/inquiries/${item.id}/history`)]);
+      setDetail(details.data ?? item); setTimeline(history.data ?? []);
+    }
     catch { /* Inquiry details remain available if history cannot load. */ }
+  }
+  async function openDeclinedDetail(item: DeclinedInquiry) {
+    setDetail(item); setTimeline([]);
+    try {
+      const history = await apiRequest<Event[]>(`/api/inquiries/${item.id}/history`);
+      setTimeline(history.data ?? []);
+    } catch { /* Declined inquiry details remain available if history cannot load. */ }
   }
   async function markRead(item: Notification) {
     if (!item.read_at) {
@@ -126,11 +156,11 @@ export default function HandlerDashboard() {
       <p className="handler-nav-label">WORKSPACE</p>
       <nav className="handler-nav" aria-label="Handler navigation">
         <button className={view === "ALL" ? "active" : ""} onClick={() => { setView("ALL"); setPage(1); }}><ClipboardList/>Dashboard</button>
-        <button className={view === "PENDING" ? "active" : ""} onClick={() => { setView("PENDING"); setPage(1); }}><Clock3/>My Assigned Inquiries</button>
+        <button className={view === "PENDING" ? "active" : ""} onClick={() => { setView("PENDING"); setPage(1); }}><Clock3/>Pending acceptance</button>
         <button className={view === "IN_PROGRESS" ? "active" : ""} onClick={() => { setView("IN_PROGRESS"); setPage(1); }}><Activity/>In Progress</button>
         <button className={view === "RESOLVED" ? "active" : ""} onClick={() => { setView("RESOLVED"); setPage(1); }}><CheckCircle2/>Resolved</button>
         <button className={view === "DECLINED" ? "active" : ""} onClick={() => void openDeclined()}><CircleAlert/>Declined / Returned</button>
-        <button onClick={() => { setNotificationsOpen((open) => !open); setProfileOpen(false); }}><Bell/>Notifications{unreadCount > 0 && <span className="handler-nav-count">{unreadCount}</span>}</button>
+        <button onClick={() => router.push("/dashboard/handler/notifications")}><Bell/>Notifications{unreadCount > 0 && <span className="handler-nav-count">{unreadCount}</span>}</button>
         <span className="handler-preferences-label">PREFERENCES</span>
         <button onClick={() => router.push("/dashboard/handler/settings")}><Settings/>Settings</button>
       </nav>
@@ -145,11 +175,11 @@ export default function HandlerDashboard() {
       </section>
       <section className="handler-list"><div className="handler-list-head"><div><span className="handler-kicker">YOUR QUEUE</span><h2>{view === "ALL" ? "My assigned inquiries" : view === "PENDING" ? "Pending acceptance" : view === "DECLINED" ? "Declined / Returned Inquiries" : readableLabel(view)}</h2><p>{view === "DECLINED" ? "Read-only history of assignments you returned to the admin queue." : "Only inquiries currently assigned to your account are shown."}</p></div></div>
         <div className="handler-filters"><label className="handler-search"><Search/><input placeholder="Search by reference or customer" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }}/></label><select value={category} onChange={(event) => { setCategory(event.target.value); setPage(1); }} aria-label="Filter by category"><option value="ALL">All categories</option>{categories.map((item) => <option key={item} value={item}>{readableLabel(item)}</option>)}</select><select value={sort} onChange={(event) => { setSort(event.target.value); setPage(1); }} aria-label="Sort inquiries"><option value="NEWEST">Newest first</option><option value="OLDEST">Oldest first</option></select></div>
-        {view === "DECLINED" ? declinedLoading ? <div className="handler-empty">Loading declined inquiries...</div> : declinedRows.length === 0 ? <div className="handler-empty"><ClipboardList/><strong>No declined inquiries</strong><span>Your returned assignments will appear here.</span></div> : <div className="handler-table-wrap"><table className="handler-table"><thead><tr><th>REFERENCE</th><th>CUSTOMER</th><th>SUBJECT</th><th>CATEGORY</th><th>DECLINED DATE</th><th>DECLINE REASON</th><th>ACCESS</th></tr></thead><tbody>{declinedRows.map((item) => <tr key={item.id}><td><span className="handler-ref">{inquiryReference(item.id)}</span></td><td><strong>{item.customer_name}</strong></td><td>{item.subject}</td><td><span className="handler-category">{readableLabel(item.category)}</span></td><td>{displayDate(item.declined_at)}</td><td className="declined-reason-readonly">{item.decline_reason}</td><td><span className="readonly-label">Read only</span></td></tr>)}</tbody></table></div> : loading ? <div className="handler-empty">Loading your assigned inquiries...</div> : rows.length === 0 ? <div className="handler-empty"><ClipboardList/><strong>Nothing to show</strong><span>{items.length ? "Try changing your search or filters." : "New assignments will appear here."}</span></div> : <div className="handler-table-wrap"><table className="handler-table"><thead><tr><th>REFERENCE</th><th>CUSTOMER</th><th>SUBJECT</th><th>CATEGORY</th><th>ASSIGNED DATE</th><th>PRIORITY</th><th>STATUS</th><th>ACTION</th></tr></thead><tbody>{rows.map((item) => <tr key={item.id}><td><button className="handler-ref" onClick={() => void openDetail(item)}>{inquiryReference(item.id)}</button></td><td><strong>{item.customer_name}</strong></td><td>{item.subject}</td><td><span className="handler-category">{readableLabel(item.category)}</span></td><td>{displayDate(item.assigned_at ?? item.created_at)}</td><td><span className="priority-normal">-</span></td><td><span className={`handler-status ${item.status.toLowerCase()}`}>{item.handler_response_status === "WAITING" ? "Pending acceptance" : readableLabel(item.status)}</span></td><td><div className="handler-row-actions">{item.handler_response_status === "WAITING" ? <><button className="handler-accept" onClick={() => void act(item.id, "accept")}>Accept</button><button className="handler-decline" onClick={() => { setDeclineTarget(item); setReason(""); }}>Decline</button></> : <button className="handler-view" onClick={() => void openDetail(item)}>View</button>}</div></td></tr>)}</tbody></table></div>}
+        {view === "DECLINED" ? declinedLoading ? <div className="handler-empty">Loading declined inquiries...</div> : declinedRows.length === 0 ? <div className="handler-empty"><ClipboardList/><strong>No declined inquiries</strong><span>Your returned assignments will appear here.</span></div> : <div className="handler-table-wrap"><table className="handler-table"><thead><tr><th>REFERENCE</th><th>CUSTOMER</th><th>SUBJECT</th><th>CATEGORY</th><th>DECLINED DATE</th><th>DECLINE REASON</th><th>ACTION</th></tr></thead><tbody>{declinedRows.map((item) => <tr key={item.id}><td><span className="handler-ref">{inquiryReference(item.id)}</span></td><td><strong>{item.customer_name}</strong></td><td>{item.subject}</td><td><span className="handler-category">{readableLabel(item.category)}</span></td><td>{displayDate(item.declined_at)}</td><td className="declined-reason-readonly">{item.decline_reason}</td><td><button className="handler-view" onClick={() => void openDeclinedDetail(item)}>View details</button></td></tr>)}</tbody></table></div> : loading ? <div className="handler-empty">Loading your assigned inquiries...</div> : rows.length === 0 ? <div className="handler-empty"><ClipboardList/><strong>Nothing to show</strong><span>{items.length ? "Try changing your search or filters." : "New assignments will appear here."}</span></div> : <div className="handler-table-wrap"><table className="handler-table"><thead><tr><th>REFERENCE</th><th>CUSTOMER</th><th>SUBJECT</th><th>CATEGORY</th><th>ASSIGNED DATE</th><th>PRIORITY</th><th>STATUS</th><th>ACTION</th></tr></thead><tbody>{rows.map((item) => <tr key={item.id}><td><button className="handler-ref" onClick={() => void openDetail(item)}>{inquiryReference(item.id)}</button></td><td><strong>{item.customer_name}</strong></td><td>{item.subject}</td><td><span className="handler-category">{readableLabel(item.category)}</span></td><td>{displayDate(item.assigned_at ?? item.created_at)}</td><td><span className="priority-normal">-</span></td><td><span className={`handler-status ${item.status.toLowerCase()}`}>{item.handler_response_status === "WAITING" ? "Pending acceptance" : readableLabel(item.status)}</span></td><td><div className="handler-row-actions"><button className="handler-view" onClick={() => void openDetail(item)}>View details</button></div></td></tr>)}</tbody></table></div>}
         <div className="handler-pagination"><span>Showing <b>{currentCount ? (page - 1) * pageSize + 1 : 0}-{Math.min(page * pageSize, currentCount)}</b> of <b>{currentCount}</b></span><div><button disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</button><span>{page} / {pageCount}</span><button disabled={page >= pageCount} onClick={() => setPage(page + 1)}>Next</button></div></div>
       </section><footer className="handler-footer">Customer care, brewed better.<span>Secure handler workspace</span></footer>
     </section>
     {declineTarget && <div className="handler-overlay" onClick={() => !busy && setDeclineTarget(null)}><section className="handler-modal" role="dialog" aria-modal="true" aria-labelledby="decline-title" onClick={(event) => event.stopPropagation()}><header><div><span className="handler-kicker">RETURN ASSIGNMENT</span><h2 id="decline-title">Decline inquiry</h2></div><button onClick={() => setDeclineTarget(null)} aria-label="Close"><X/></button></header><dl><div><dt>Reference</dt><dd>{inquiryReference(declineTarget.id)}</dd></div><div><dt>Customer</dt><dd>{declineTarget.customer_name}</dd></div><div><dt>Category</dt><dd>{readableLabel(declineTarget.category)}</dd></div></dl><label className="handler-reason">Reason for declining<textarea autoFocus value={reason} onChange={(event) => setReason(event.target.value)} minLength={10} maxLength={2000} placeholder="Explain why this inquiry should be reassigned..."/><small>{reason.trim().length}/2000 characters - minimum 10</small></label><div className="handler-modal-actions"><button className="handler-cancel" disabled={busy} onClick={() => setDeclineTarget(null)}>Cancel</button><button className="handler-confirm-decline" disabled={busy || reason.trim().length < 10} onClick={() => void act(declineTarget.id, "decline", reason)}>{busy ? "Returning..." : "Confirm decline"}</button></div></section></div>}
-    {detail && <div className="handler-overlay" onClick={() => setDetail(null)}><section className="handler-modal" role="dialog" aria-modal="true" aria-labelledby="detail-title" onClick={(event) => event.stopPropagation()}><header><div><span className="handler-kicker">INQUIRY DETAILS</span><h2 id="detail-title">{inquiryReference(detail.id)}</h2></div><button onClick={() => setDetail(null)} aria-label="Close"><X/></button></header><dl><div><dt>Customer</dt><dd>{detail.customer_name}</dd></div><div><dt>Contact</dt><dd>{detail.contact}</dd></div><div><dt>Subject</dt><dd>{detail.subject}</dd></div><div><dt>Category</dt><dd>{readableLabel(detail.category)}</dd></div><div><dt>Assigned date</dt><dd>{displayDate(detail.assigned_at ?? detail.created_at)}</dd></div><div><dt>Current status</dt><dd>{readableLabel(detail.status)}</dd></div><div className="handler-description"><dt>Description</dt><dd>{detail.description}</dd></div></dl><section className="handler-timeline"><h3>Activity timeline</h3>{timeline.length === 0 ? <p>Loading activity...</p> : timeline.map((event) => <article key={event.id}><span/><div><strong>{readableLabel(event.action)}</strong><small>{event.changed_by_name} - {new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }).format(new Date(event.created_at))}</small>{event.new_value && event.action !== "CREATED" && <p>{event.new_value}</p>}</div></article>)}</section><div className="handler-modal-actions"><button className="handler-cancel" onClick={() => setDetail(null)}>Close</button>{detail.status === "IN_PROGRESS" && <button className="handler-resolve" disabled={busy} onClick={() => void act(detail.id, "resolve")}>Mark resolved</button>}</div></section></div>}
+    {detail && <div className="handler-overlay" onClick={() => setDetail(null)}><section className="handler-modal" role="dialog" aria-modal="true" aria-labelledby="detail-title" onClick={(event) => event.stopPropagation()}><header><div><span className="handler-kicker">INQUIRY DETAILS</span><h2 id="detail-title">{inquiryReference(detail.id)}</h2></div><button onClick={() => setDetail(null)} aria-label="Close"><X/></button></header><dl><div><dt>Customer</dt><dd>{detail.customer_name}</dd></div><div><dt>Contact</dt><dd>{detail.contact}{detail.customer_email ? ` | ${detail.customer_email}` : ""}</dd></div><div><dt>Subject</dt><dd>{detail.subject}</dd></div><div><dt>Category</dt><dd>{readableLabel(detail.category)}</dd></div><div><dt>Assigned date</dt><dd>{displayDate(detail.assigned_at ?? detail.created_at)}</dd></div><div><dt>Current status</dt><dd>{detail.handler_response_status === "WAITING" ? "Pending acceptance" : detail.handler_response_status === "DECLINED" ? "Declined / Returned" : readableLabel(detail.status)}</dd></div><div className="handler-description"><dt>Description</dt><dd>{detail.description}</dd></div></dl><InquiryEvidence files={detail.evidence_files}/><section className="handler-timeline"><h3>Activity timeline</h3>{timeline.length === 0 ? <p>Loading activity...</p> : timeline.map((event) => <article key={event.id}><span/><div><strong>{readableLabel(event.action)}</strong><small>{event.changed_by_name} - {new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }).format(new Date(event.created_at))}</small>{event.new_value && event.action !== "CREATED" && <p>{event.new_value}</p>}</div></article>)}</section><div className="handler-modal-actions"><button className="handler-cancel" onClick={() => setDetail(null)}>Close</button>{detail.handler_response_status === "WAITING" && <><button className="handler-decline" disabled={busy} onClick={() => { setDeclineTarget(detail); setReason(""); setDetail(null); }}>Decline</button><button className="handler-accept" disabled={busy} onClick={() => void act(detail.id, "accept")}>{busy ? "Accepting..." : "Accept"}</button></>}{detail.status === "IN_PROGRESS" && <button className="handler-resolve" disabled={busy} onClick={() => void act(detail.id, "resolve")}>Mark resolved</button>}</div></section></div>}
   </main>;
 }

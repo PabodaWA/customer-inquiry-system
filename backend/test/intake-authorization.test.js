@@ -21,7 +21,7 @@ const intakeRequest = (overrides = {}) => ({
   ...overrides,
 });
 
-function inquiryCreationClient({ handlers = [], workloads = [], cursor = null, failAt = "" } = {}) {
+function inquiryCreationClient({ handlers = [], workloads = [], cursor = null, failAt = "", matchingStatuses = [] } = {}) {
   const calls = [];
   let row = null;
   return {
@@ -30,6 +30,12 @@ function inquiryCreationClient({ handlers = [], workloads = [], cursor = null, f
       calls.push({ sql, values });
       if (sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") return { rows: [] };
       if (sql.includes("SELECT id FROM inquiry_categories")) return { rows: [{ id: 1 }] };
+      if (sql.includes("SELECT pg_advisory_xact_lock")) return { rows: [] };
+      if (sql.includes("FROM inquiries") && sql.includes("status IN ('NEW', 'IN_PROGRESS')")) {
+        return { rows: matchingStatuses
+          .filter((status) => status === "NEW" || status === "IN_PROGRESS")
+          .map((status, index) => ({ id: 119 + index, status })) };
+      }
       if (sql.includes("INSERT INTO inquiries")) {
         row = { id: 120, customer_name: values[0], contact: values[1], subject: values[2], description: values[3], category: values[4], created_by: values[5], status: "NEW", assigned_to: null, assignment_status: "PENDING", handler_response_status: "NOT_REQUIRED" };
         return { rows: [row] };
@@ -137,6 +143,67 @@ test("successful intake creation remains pending when no handler is eligible", a
   assert.match(response.body.message, /pending/);
   assert.equal(client.calls.some((call) => call.sql.includes("UPDATE assignment_state")), false);
   assert.ok(client.calls.some((call) => call.sql === "COMMIT"));
+});
+
+test("New and In Progress matching inquiries are rejected without an insert", async (t) => {
+  const originalConnect = pool.connect;
+  t.after(() => { pool.connect = originalConnect; });
+
+  for (const status of ["NEW", "IN_PROGRESS"]) {
+    const client = inquiryCreationClient({ matchingStatuses: [status] });
+    pool.connect = async () => client;
+    const response = mockResponse();
+    await controller.createInquiry(intakeRequest({ body: {
+      customer_name: "Customer One", contact: "+94 (77) 123-4567", subject: "Repair request",
+      description: "Needs a repair.", category: "REPAIR",
+    } }), response);
+
+    assert.equal(response.statusCode, 409);
+    assert.equal(response.body.message, "This inquiry already exists and is currently being handled. You can submit the same inquiry again once the existing inquiry has been resolved.");
+    assert.equal(client.calls.some((call) => call.sql.includes("INSERT INTO inquiries")), false);
+    assert.ok(client.calls.some((call) => call.sql === "ROLLBACK"));
+    assert.equal(client.calls.some((call) => call.sql === "COMMIT"), false);
+    const duplicateCheck = client.calls.find((call) => call.sql.includes("status IN ('NEW', 'IN_PROGRESS')"));
+    assert.deepEqual(duplicateCheck.values, ["customer one", "94771234567", "Repair request", "Needs a repair."]);
+    assert.match(duplicateCheck.sql, /LOWER\(BTRIM\(customer_name\)\) = \$1/);
+  }
+});
+
+test("resolved matching inquiries do not block a new record and email identity is normalized", async (t) => {
+  const originalConnect = pool.connect;
+  const client = inquiryCreationClient({ handlers: [], matchingStatuses: ["RESOLVED"] });
+  pool.connect = async () => client;
+  t.after(() => { pool.connect = originalConnect; });
+
+  const response = mockResponse();
+  await controller.createInquiry(intakeRequest({ body: {
+    customer_name: "Customer One", contact: " CUSTOMER@EXAMPLE.COM ", subject: "Repair request",
+    description: "Needs a repair.", category: "REPAIR",
+  } }), response);
+
+  assert.equal(response.statusCode, 201);
+  assert.ok(client.calls.some((call) => call.sql.includes("INSERT INTO inquiries")));
+  const duplicateCheck = client.calls.find((call) => call.sql.includes("status IN ('NEW', 'IN_PROGRESS')"));
+  assert.match(duplicateCheck.sql, /LOWER\(BTRIM\(contact\)\) = \$2/);
+  assert.deepEqual(duplicateCheck.values, ["customer one", "customer@example.com", "Repair request", "Needs a repair."]);
+  const insert = client.calls.find((call) => call.sql.includes("INSERT INTO inquiries"));
+  assert.doesNotMatch(insert.sql, /customer_email|UNIQUE/i);
+});
+
+test("any active matching inquiry blocks even when another match is resolved", async (t) => {
+  const originalConnect = pool.connect;
+  const client = inquiryCreationClient({ matchingStatuses: ["RESOLVED", "IN_PROGRESS"] });
+  pool.connect = async () => client;
+  t.after(() => { pool.connect = originalConnect; });
+
+  const response = mockResponse();
+  await controller.createInquiry(intakeRequest({ body: {
+    customer_name: "Customer One", contact: "+94 77 123 4567", subject: "Repair request",
+    description: "Needs a repair.", category: "REPAIR",
+  } }), response);
+
+  assert.equal(response.statusCode, 409);
+  assert.equal(client.calls.some((call) => call.sql.includes("INSERT INTO inquiries")), false);
 });
 
 test("rolls back inquiry creation if automatic assignment fails", async (t) => {

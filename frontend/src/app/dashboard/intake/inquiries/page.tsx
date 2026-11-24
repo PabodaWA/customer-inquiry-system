@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { Activity, Bell, CalendarDays, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, ClipboardList, Coffee, Eye, FilePlus2, FilterX, Inbox, LayoutDashboard, LogOut, Menu, Search, Settings, X } from "lucide-react";
 import ThemeToggle from "../../../../components/ThemeToggle";
 import { apiRequest, displayDate, inquiryReference, readableLabel, type Inquiry, type InquiryStatus } from "../../../../lib/admin";
+import { useInquiryRefresh } from "../../../../lib/useInquiryRefresh";
+import InquiryEvidence from "../../../../components/InquiryEvidence";
 import "../intake.css";
 
 type User = { id: number; fullName: string; email: string; role: string };
@@ -86,7 +88,13 @@ export default function IntakeInquiriesPage() {
     }
     try {
       const result = await apiRequest<Inquiry[]>(`/api/inquiries?${params.toString()}`) as ListResponse;
-      setInquiries(result.data ?? []); setTotal(result.pagination?.total ?? result.count ?? 0);
+      const currentInquiries = result.data ?? [];
+      setInquiries(currentInquiries);
+      setSelected((current) => {
+        const latest = currentInquiries.find((item) => item.id === current?.id);
+        return latest && current ? { ...current, ...latest } : current;
+      });
+      setTotal(result.pagination?.total ?? result.count ?? 0);
       setTotalPages(Math.max(1, result.pagination?.totalPages ?? 1));
       setStats(result.stats ?? { total: 0, new_count: 0, in_progress: 0, resolved: 0 }); setError("");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to load inquiries."); }
@@ -98,6 +106,18 @@ export default function IntakeInquiriesPage() {
     const timer = window.setTimeout(() => { setLoading(true); void loadInquiries(); }, 0);
     return () => window.clearTimeout(timer);
   }, [user, loadInquiries]);
+
+  const refreshInquiryData = useCallback(async () => {
+    await loadInquiries();
+    if (!selected) return;
+    try {
+      const result = await apiRequest<Inquiry>(`/api/inquiries/${selected.id}`);
+      setSelected(result.data ?? selected);
+    } catch (cause) {
+      console.error("Could not refresh the open inquiry.", cause);
+    }
+  }, [loadInquiries, selected]);
+  useInquiryRefresh(refreshInquiryData);
 
   const range = useMemo(() => {
     if (datePreset !== "CUSTOM") return { from: "", to: "" };
@@ -138,7 +158,7 @@ export default function IntakeInquiriesPage() {
         <Link href="/dashboard/intake"><LayoutDashboard size={18}/>Dashboard</Link>
         <Link className="current" aria-current="page" href="/dashboard/intake/inquiries"><ClipboardList size={18}/>My created inquiries</Link>
         <Link href="/dashboard/intake/new"><FilePlus2 size={18}/>New inquiry</Link>
-        <Link href="/notifications"><Bell size={18}/>Notifications<span className="nav-unread" aria-label="Unread notifications"/></Link>
+        <Link href="/dashboard/intake/notifications"><Bell size={18}/>Notifications</Link>
       </nav>
       <div className="intake-nav-label settings-label">PREFERENCES</div><nav className="intake-nav"><Link href="/dashboard/intake/settings"><Settings size={18}/>Settings</Link></nav>
       <div className="intake-sidebar-profile"><span className="intake-avatar">{initials(user?.fullName ?? "Staff")}</span><span className="intake-profile-name"><strong>{user?.fullName ?? "Intake Staff"}</strong><small>Intake Staff</small></span><button className="intake-logout" aria-label="Log out" onClick={() => void logout()}><LogOut size={17}/></button></div>
@@ -169,6 +189,6 @@ export default function IntakeInquiriesPage() {
         </section>
       </div>
     </main>
-    {(selected || detailLoading) && <div className="intake-modal-backdrop" role="presentation" onClick={() => { if (!detailLoading) setSelected(null); }}>{detailLoading ? <section className="intake-modal" role="status">Loading inquiry details…</section> : selected && <section className="intake-modal all-detail-modal" role="dialog" aria-modal="true" aria-labelledby="all-detail-title" onClick={(event) => event.stopPropagation()}><div className="intake-modal-title"><div><p className="intake-kicker">INQUIRY DETAILS</p><h2 id="all-detail-title">{inquiryReference(selected.id)}</h2></div><button aria-label="Close details" onClick={() => setSelected(null)}><X size={19}/></button></div><div className="intake-modal-customer"><i>{initials(selected.customer_name)}</i><div><strong>{selected.customer_name}</strong><small>{selected.contact || "Customer contact unavailable"}</small></div></div><div className="all-detail-description"><strong>Inquiry description</strong><p>{selected.description || "No description provided."}</p></div><dl><div><dt>Subject</dt><dd>{selected.subject}</dd></div><div><dt>Category</dt><dd>{readableLabel(selected.category)}</dd></div><div><dt>Assigned handler</dt><dd>{selected.assigned_staff_name ?? (selected.assigned_to ? `Staff #${selected.assigned_to}` : selected.assignment_status === "ASSIGNED" ? "Assigned" : "Unassigned")}</dd></div><div><dt>Created</dt><dd>{displayDate(selected.created_at)}</dd></div><div><dt>Current status</dt><dd><span className={`intake-status status-${selected.status.toLowerCase()}`}>{readableLabel(selected.status)}</span></dd></div></dl><section className="all-history"><h3>Inquiry history</h3>{history.length ? history.map((event) => <article key={event.id}><span className="all-history-dot"/><div><strong>{event.action === "CREATED" ? "Inquiry created" : event.action === "ASSIGNED" ? "Handler assigned" : event.action === "STATUS_CHANGED" ? `Status changed${event.new_value ? ` to ${readableLabel(event.new_value)}` : ""}` : readableLabel(event.action)}</strong><p>{event.changed_by_name ? `By ${event.changed_by_name}` : "System update"}{event.old_value && event.new_value && event.action === "STATUS_CHANGED" ? ` · ${readableLabel(event.old_value)} → ${readableLabel(event.new_value)}` : ""}</p><small>{displayTimestamp(event.created_at)}</small></div></article>) : <p>No history is available for this inquiry.</p>}</section><button className="intake-modal-done" onClick={() => setSelected(null)}>Done</button></section>}</div>}
+    {(selected || detailLoading) && <div className="intake-modal-backdrop" role="presentation" onClick={() => { if (!detailLoading) setSelected(null); }}>{detailLoading ? <section className="intake-modal" role="status">Loading inquiry details…</section> : selected && <section className="intake-modal all-detail-modal" role="dialog" aria-modal="true" aria-labelledby="all-detail-title" onClick={(event) => event.stopPropagation()}><div className="intake-modal-title"><div><p className="intake-kicker">INQUIRY DETAILS</p><h2 id="all-detail-title">{inquiryReference(selected.id)}</h2></div><button aria-label="Close details" onClick={() => setSelected(null)}><X size={19}/></button></div><div className="intake-modal-customer"><i>{initials(selected.customer_name)}</i><div><strong>{selected.customer_name}</strong><small>{selected.contact || "Customer contact unavailable"}{selected.customer_email ? `  ·  ${selected.customer_email}` : ""}</small></div></div><div className="all-detail-description"><strong>Inquiry description</strong><p>{selected.description || "No description provided."}</p></div><InquiryEvidence files={selected.evidence_files}/><dl><div><dt>Subject</dt><dd>{selected.subject}</dd></div><div><dt>Category</dt><dd>{readableLabel(selected.category)}</dd></div><div><dt>Assigned handler</dt><dd>{selected.assigned_staff_name ?? (selected.assigned_to ? `Staff #${selected.assigned_to}` : selected.assignment_status === "ASSIGNED" ? "Assigned" : "Unassigned")}</dd></div><div><dt>Created</dt><dd>{displayDate(selected.created_at)}</dd></div><div><dt>Current status</dt><dd><span className={`intake-status status-${selected.status.toLowerCase()}`}>{readableLabel(selected.status)}</span></dd></div></dl><section className="all-history"><h3>Inquiry history</h3>{history.length ? history.map((event) => <article key={event.id}><span className="all-history-dot"/><div><strong>{event.action === "CREATED" ? "Inquiry created" : event.action === "ASSIGNED" ? "Handler assigned" : event.action === "STATUS_CHANGED" ? `Status changed${event.new_value ? ` to ${readableLabel(event.new_value)}` : ""}` : readableLabel(event.action)}</strong><p>{event.changed_by_name ? `By ${event.changed_by_name}` : "System update"}{event.old_value && event.new_value && event.action === "STATUS_CHANGED" ? ` · ${readableLabel(event.old_value)} → ${readableLabel(event.new_value)}` : ""}</p><small>{displayTimestamp(event.created_at)}</small></div></article>) : <p>No history is available for this inquiry.</p>}</section><button className="intake-modal-done" onClick={() => setSelected(null)}>Done</button></section>}</div>}
   </div>;
 }
