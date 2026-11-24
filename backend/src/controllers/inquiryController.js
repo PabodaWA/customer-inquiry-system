@@ -11,14 +11,6 @@ const VALID_STATUSES = [
   "RESOLVED"
 ];
 
-const VALID_CATEGORIES = [
-  "GENERAL",
-  "TECHNICAL",
-  "REPAIR",
-  "BILLING"
-];
-
-
 // ==========================================
 // HELPER FUNCTIONS
 // ==========================================
@@ -84,6 +76,7 @@ const createInquiry = async (req, res) => {
     description,
     category = "GENERAL"
   } = req.body;
+  const categoryName = typeof category === "string" ? category.trim().toUpperCase().replace(/\s+/g, "_") : "";
 
   // Validate required fields
   if (
@@ -102,11 +95,7 @@ const createInquiry = async (req, res) => {
     });
   }
 
-  // Validate category
-  if (
-    typeof category !== "string" ||
-    !VALID_CATEGORIES.includes(category)
-  ) {
+  if (!categoryName) {
     return res.status(400).json({
       success: false,
       message: "Invalid inquiry category."
@@ -120,6 +109,15 @@ const createInquiry = async (req, res) => {
     client = await pool.connect();
 
     await client.query("BEGIN");
+
+    const categoryResult = await client.query(
+      "SELECT id FROM inquiry_categories WHERE name = $1 AND is_active = TRUE",
+      [categoryName]
+    );
+    if (!categoryResult.rows.length) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ success: false, message: "Select an active inquiry category." });
+    }
 
     // Insert inquiry
     const result = await client.query(
@@ -139,7 +137,7 @@ const createInquiry = async (req, res) => {
         contact.trim(),
         subject.trim(),
         description.trim(),
-        category,
+        categoryName,
         user.id
       ]
     );
@@ -214,8 +212,9 @@ const getAllInquiries = async (req, res) => {
     } = req.query;
 
     let query = `
-      SELECT *
-      FROM inquiries
+      SELECT i.*, assigned.full_name AS assigned_staff_name
+      FROM inquiries i
+      LEFT JOIN users assigned ON assigned.id = i.assigned_to
       WHERE 1 = 1
     `;
 
@@ -247,9 +246,10 @@ const getAllInquiries = async (req, res) => {
 
       query += `
         AND (
-          customer_name ILIKE $${values.length}
-          OR contact ILIKE $${values.length}
-          OR subject ILIKE $${values.length}
+          i.customer_name ILIKE $${values.length}
+          OR i.contact ILIKE $${values.length}
+          OR i.subject ILIKE $${values.length}
+          OR i.id::text ILIKE $${values.length}
         )
       `;
 
@@ -268,7 +268,7 @@ const getAllInquiries = async (req, res) => {
       values.push(status);
 
       query += `
-        AND status = $${values.length}
+        AND i.status = $${values.length}
       `;
 
     }
@@ -276,17 +276,21 @@ const getAllInquiries = async (req, res) => {
     // Filter by category
     if (category) {
 
-      if (!VALID_CATEGORIES.includes(category)) {
+      const categoryResult = await pool.query(
+        "SELECT id FROM inquiry_categories WHERE name = $1",
+        [String(category).trim().toUpperCase()]
+      );
+      if (!categoryResult.rows.length) {
         return res.status(400).json({
           success: false,
           message: "Invalid inquiry category."
         });
       }
 
-      values.push(category);
+      values.push(String(category).trim().toUpperCase());
 
       query += `
-        AND category = $${values.length}
+        AND i.category = $${values.length}
       `;
 
     }
@@ -304,14 +308,14 @@ const getAllInquiries = async (req, res) => {
       values.push(assigned_to);
 
       query += `
-        AND assigned_to = $${values.length}
+        AND i.assigned_to = $${values.length}
       `;
 
     }
 
     // Latest inquiries first
     query += `
-      ORDER BY created_at DESC
+      ORDER BY i.created_at DESC
     `;
 
     const result = await pool.query(query, values);
@@ -358,9 +362,10 @@ const getInquiryById = async (req, res) => {
 
     // Find inquiry
     const result = await pool.query(
-      `SELECT *
-       FROM inquiries
-       WHERE id = $1`,
+      `SELECT i.*, assigned.full_name AS assigned_staff_name
+       FROM inquiries i
+       LEFT JOIN users assigned ON assigned.id = i.assigned_to
+       WHERE i.id = $1`,
       [id]
     );
 

@@ -8,6 +8,7 @@ const sessionMiddleware = require("./config/session");
 const healthRoutes = require("./routes/healthRoutes");
 const authRoutes = require("./routes/authRoutes");
 const inquiryRoutes = require("./routes/inquiryRoutes");
+const adminRoutes = require("./routes/adminRoutes");
 
 const app = express();
 
@@ -30,5 +31,6 @@ app.use(sessionMiddleware);
 app.use("/api/health", healthRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/inquiries", inquiryRoutes);
+app.use("/api/admin", adminRoutes);
 
 module.exports = app;
