@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { Bell, Check, ChevronDown, ChevronRight, ClipboardList, Coffee, FilePlus2, LayoutDashboard, LogOut, Mail, Menu, Settings as SettingsIcon, ShieldCheck, UserRound, X } from "lucide-react";
 import ThemeToggle from "../../../../components/ThemeToggle";
 import ChangePasswordForm from "../../../../components/ChangePasswordForm";
+import { useLogout } from "../../../../lib/useLogout";
+import LogoutFeedback from "../../../../components/LogoutFeedback";
 import "../intake.css";
 
 type User = { id: number; fullName: string; email: string; role: string };
@@ -14,6 +16,7 @@ const initials = (name: string) => name.split(/\s+/).slice(0, 2).map((part) => p
 
 export default function IntakeSettingsPage() {
   const router = useRouter();
+  const { logout, error: logoutError } = useLogout();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -38,12 +41,9 @@ export default function IntakeSettingsPage() {
     return () => { active = false; window.clearTimeout(timer); };
   }, [router]);
 
-  async function logout() {
-    await fetch(`${apiUrl}/api/auth/logout`, { method: "POST", credentials: "include" });
-    router.replace("/");
-  }
 
   return <div className="intake-app">
+    <LogoutFeedback error={logoutError} onRetry={() => void logout()}/>
     {mobileNav && <button className="intake-scrim" aria-label="Close navigation" onClick={() => setMobileNav(false)} />}
     <aside className={`intake-sidebar ${mobileNav ? "is-open" : ""}`}>
       <Link href="/dashboard/intake" className="intake-brand"><span className="intake-brand-icon"><Coffee size={21}/></span><span><small>INQUIRY PORTAL</small></span><button className="intake-close" aria-label="Close menu" onClick={(event) => { event.preventDefault(); setMobileNav(false); }}><X size={18}/></button></Link>

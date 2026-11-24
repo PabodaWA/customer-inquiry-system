@@ -30,6 +30,14 @@ export default function AdminNotificationsPage() {
     setUnreadCount(result.unread_count ?? 0);
   }, []);
 
+  async function retryLoad() {
+    setLoading(true);
+    setError("");
+    try { await loadNotifications(); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "Could not load notifications."); }
+    finally { setLoading(false); }
+  }
+
   useEffect(() => {
     let active = true;
     const initialLoad = window.setTimeout(() => {
@@ -74,7 +82,7 @@ export default function AdminNotificationsPage() {
 
   return <div className="admin-notifications-page">
     <div className="admin-notifications-heading"><div><span className="panel-kicker">INBOX</span><h2>Notifications</h2><p>Updates about assignments and inquiry activity across your team.</p></div><button className="admin-mark-all" onClick={() => void markAllRead()} disabled={saving || unreadCount === 0}><CheckCheck size={15}/>Mark all as read</button></div>
-    {error && <div className="admin-notifications-error" role="alert">{error}</div>}
+    {error && <div className="admin-notifications-error" role="alert">{error}<button onClick={() => void retryLoad()}>Retry</button></div>}
     <section className="admin-notifications-card">
       <header className="admin-notifications-toolbar"><div className="admin-notification-filters" aria-label="Filter notifications">{(["ALL", "UNREAD", "READ"] as const).map((value) => <button key={value} className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>{readableLabel(value)}{value === "UNREAD" && unreadCount > 0 && <span>{unreadCount}</span>}</button>)}</div><span>{unreadCount} unread</span></header>
       {loading ? <div className="admin-notifications-empty">Loading notifications...</div> : filtered.length === 0 ? <div className="admin-notifications-empty"><span><Bell size={20}/></span><strong>{filter === "UNREAD" ? "You’re all caught up" : "No notifications yet"}</strong><p>{filter === "UNREAD" ? "New inquiry updates will appear here." : "Team and inquiry updates will appear here."}</p></div> : <div className="admin-notification-list">{filtered.map((item) => <article key={item.id} className={`admin-notification-item${item.read_at ? " is-read" : " is-unread"}`}><span className="admin-notification-dot" aria-hidden="true"/><div className="admin-notification-copy"><div className="admin-notification-meta"><span>{readableLabel(item.kind)}</span><time dateTime={item.created_at}>{dateLabel(item.created_at)}</time></div><p>{item.message}</p>{item.inquiry_id && <Link href="/dashboard/admin/inquiries" className="admin-notification-inquiry">Inquiry {inquiryReference(item.inquiry_id)} <ChevronRight size={14}/></Link>}</div>{!item.read_at && <button className="admin-mark-read" onClick={() => void markRead(item)} disabled={saving}><Check size={14}/>Mark read</button>}</article>)}</div>}

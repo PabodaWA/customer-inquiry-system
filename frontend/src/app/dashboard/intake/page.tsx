@@ -7,6 +7,8 @@ import { Activity, Bell, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, C
 import ThemeToggle from "../../../components/ThemeToggle";
 import InquiryEvidence from "../../../components/InquiryEvidence";
 import { useInquiryRefresh } from "../../../lib/useInquiryRefresh";
+import { useLogout } from "../../../lib/useLogout";
+import LogoutFeedback from "../../../components/LogoutFeedback";
 import "./intake.css";
 
 type Status = "NEW" | "IN_PROGRESS" | "RESOLVED";
@@ -21,6 +23,7 @@ const initials = (value: string) => value.split(/\s+/).slice(0, 2).map((part) =>
 
 export default function IntakeDashboard() {
   const router = useRouter();
+  const { logout, error: logoutError } = useLogout();
   const [user, setUser] = useState<User | null>(null);
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
   const [activityEvents, setActivityEvents] = useState<ActivityEvent[]>([]);
@@ -97,7 +100,6 @@ export default function IntakeDashboard() {
   }, []);
   useInquiryRefresh(refreshInquiries);
 
-  async function logout() { await fetch(`${apiUrl}/api/auth/logout`, { method: "POST", credentials: "include" }); router.replace("/"); }
   async function openNotification(item: Notification) {
     if (!item.read_at) {
       try {
@@ -130,6 +132,7 @@ export default function IntakeDashboard() {
   const greetingName = user?.fullName?.trim().toLowerCase() === "intake staff" ? "" : user?.fullName?.trim().split(/\s+/)[0] ?? "";
 
   return <div className={`intake-app${sidebarCollapsed ? " is-collapsed" : ""}`}>
+    <LogoutFeedback error={logoutError} onRetry={() => void logout()}/>
     {mobileNav && <button className="intake-scrim" aria-label="Close navigation" onClick={() => setMobileNav(false)} />}
     <aside id="intake-sidebar" className={`intake-sidebar ${mobileNav ? "is-open" : ""}`}>
 

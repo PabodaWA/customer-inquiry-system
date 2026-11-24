@@ -37,7 +37,7 @@ function inquiryCreationClient({ handlers = [], workloads = [], cursor = null, f
           .map((status, index) => ({ id: 119 + index, status })) };
       }
       if (sql.includes("INSERT INTO inquiries")) {
-        row = { id: 120, customer_name: values[0], contact: values[1], subject: values[2], description: values[3], category: values[4], created_by: values[5], status: "NEW", assigned_to: null, assignment_status: "PENDING", handler_response_status: "NOT_REQUIRED" };
+        row = { id: 120, customer_name: values[0], customer_email: values[1], contact: values[2], subject: values[3], description: values[4], category: values[5], created_by: values[6], status: "NEW", assigned_to: null, assignment_status: "PENDING", handler_response_status: "NOT_REQUIRED" };
         return { rows: [row] };
       }
       if (sql.includes("INSERT INTO assignment_state")) return { rows: [] };
@@ -77,6 +77,16 @@ test("intake staff cannot update inquiry statuses", async () => {
   await controller.updateInquiryStatus(intakeRequest({ body: { status: "RESOLVED" } }), response);
   assert.equal(response.statusCode, 403);
   assert.equal(response.body.success, false);
+});
+
+test("admins cannot bypass the handler status workflow", async () => {
+  const response = mockResponse();
+  await controller.updateInquiryStatus({
+    ...intakeRequest(),
+    session: { user: { id: 1, role: "ADMIN" } },
+    body: { status: "RESOLVED" },
+  }, response);
+  assert.equal(response.statusCode, 403);
 });
 
 test("unauthorized handlers cannot create inquiries", async () => {
@@ -187,7 +197,8 @@ test("resolved matching inquiries do not block a new record and email identity i
   assert.match(duplicateCheck.sql, /LOWER\(BTRIM\(contact\)\) = \$2/);
   assert.deepEqual(duplicateCheck.values, ["customer one", "customer@example.com", "Repair request", "Needs a repair."]);
   const insert = client.calls.find((call) => call.sql.includes("INSERT INTO inquiries"));
-  assert.doesNotMatch(insert.sql, /customer_email|UNIQUE/i);
+  assert.match(insert.sql, /customer_email/);
+  assert.equal(insert.values[1], null);
 });
 
 test("any active matching inquiry blocks even when another match is resolved", async (t) => {
@@ -227,7 +238,8 @@ test("rolls back inquiry creation if automatic assignment fails", async (t) => {
 
 test("intake staff cannot read inquiries or histories they did not create", async (t) => {
   const originalQuery = pool.query;
-  pool.query = async () => ({ rows: [{ id: 12, created_by: 7, assigned_to: null }] });
+  const calls = [];
+  pool.query = async (sql) => { calls.push(sql); return { rows: [{ id: 12, created_by: 7, assigned_to: null }] }; };
   t.after(() => { pool.query = originalQuery; });
 
   const detailResponse = mockResponse();
@@ -237,6 +249,8 @@ test("intake staff cannot read inquiries or histories they did not create", asyn
   const historyResponse = mockResponse();
   await controller.getInquiryHistory(intakeRequest(), historyResponse);
   assert.equal(historyResponse.statusCode, 403);
+  assert.equal(calls.length, 2, "evidence and history details are not queried after access is denied");
+  assert.equal(calls.some((sql) => sql.includes("inquiry_evidence") || sql.includes("inquiry_history")), false);
 });
 
 test("intake staff cannot view assignment history for inquiries they did not create", async (t) => {

@@ -10,6 +10,7 @@ import {
   Users, X, UserRoundX,
 } from "lucide-react";
 import ThemeToggle from "./ThemeToggle";
+import { logoutSession } from "../lib/logout";
 
 type AdminUser = { id?: number; fullName: string; email: string; role: "ADMIN" };
 type AdminLayoutContextValue = { user: AdminUser; search: string; setSearch: (value: string) => void };
@@ -61,6 +62,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [logoutError, setLogoutError] = useState("");
+  const [loggingOut, setLoggingOut] = useState(false);
   const title = getPageTitle(pathname);
 
   useEffect(() => {
@@ -109,8 +112,11 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const contextValue = useMemo(() => user ? { user, search, setSearch } : null, [user, search]);
 
   async function logout() {
-    try { await fetch(`${apiUrl}/api/auth/logout`, { method: "POST", credentials: "include" }); }
-    finally { router.replace("/"); }
+    setLogoutError("");
+    setLoggingOut(true);
+    try { await logoutSession(); router.replace("/"); }
+    catch { setLogoutError("Could not log out because the service is unavailable. Please try again."); }
+    finally { setLoggingOut(false); }
   }
 
   function closeMobileNav() {
@@ -142,7 +148,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           <div className="side-divider"/>
           <Link className={`side-link${pathname === "/dashboard/admin/settings" ? " selected" : ""}`} href="/dashboard/admin/settings" onClick={() => { if (mobileOpen) closeMobileNav(); }}><Settings size={18}/><span>Settings</span></Link>
           <div className="sidebar-bottom">
-            <button className="logout-link" onClick={logout}><LogOut size={18}/><span>Log out</span></button>
+            <button className="logout-link" onClick={() => void logout()} disabled={loggingOut}><LogOut size={18}/><span>{loggingOut ? "Logging out…" : "Log out"}</span></button>
             <div className="sidebar-foot"><ShieldCheck size={14}/> <span>Secure workspace</span></div>
           </div>
         </aside>
@@ -161,7 +167,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
               </div>
             </div>
           </header>
-          <main className="admin-content">{children}</main>
+          <main className="admin-content">{logoutError && <div className="feedback error-feedback" role="alert">{logoutError}<button onClick={() => void logout()} disabled={loggingOut}>Retry</button></div>}{children}</main>
         </section>
       </div>
     </AdminLayoutContext.Provider>

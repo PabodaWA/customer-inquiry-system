@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { Bell, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, CloudUpload, Coffee, FilePlus2, LayoutDashboard, LogOut, Menu, Settings, X } from "lucide-react";
 import ThemeToggle from "../../../../components/ThemeToggle";
 import { apiRequest, inquiryReference, readableLabel, type Inquiry } from "../../../../lib/admin";
+import { useLogout } from "../../../../lib/useLogout";
+import LogoutFeedback from "../../../../components/LogoutFeedback";
 import "../intake.css";
 
 type User = { id: number; fullName: string; email: string; role: string };
@@ -19,6 +21,7 @@ const allowedEvidenceTypes = ["image/jpeg", "image/png", "image/webp", "applicat
 
 export default function NewIntakeInquiryPage() {
   const router = useRouter();
+  const { logout, error: logoutError } = useLogout();
   const [user, setUser] = useState<User | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [values, setValues] = useState(emptyForm);
@@ -84,10 +87,6 @@ export default function NewIntakeInquiryPage() {
     finally { setSaving(false); }
   }
 
-  async function logout() {
-    await fetch(`${apiUrl}/api/auth/logout`, { method: "POST", credentials: "include" });
-    router.replace("/");
-  }
 
   function field<K extends keyof FormValues>(name: K, value: FormValues[K]) {
     setValues((current) => ({ ...current, [name]: value }));
@@ -105,6 +104,7 @@ export default function NewIntakeInquiryPage() {
   }
 
   return <div className="intake-app">
+    <LogoutFeedback error={logoutError} onRetry={() => void logout()}/>
     {mobileNav && <button className="intake-scrim" aria-label="Close navigation" onClick={() => setMobileNav(false)} />}
     <aside className={`intake-sidebar ${mobileNav ? "is-open" : ""}`}>
       <Link href="/dashboard/intake" className="intake-brand"><span className="intake-brand-icon"><Coffee size={21}/></span><span><small>INQUIRY PORTAL</small></span><button className="intake-close" aria-label="Close menu" onClick={(event) => { event.preventDefault(); setMobileNav(false); }}><X size={18}/></button></Link>

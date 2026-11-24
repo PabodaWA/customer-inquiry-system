@@ -7,6 +7,8 @@ import { Activity, Bell, Check, CheckCircle2, ChevronDown, CircleAlert, Clipboar
 import { apiRequest, displayDate, inquiryReference, readableLabel, type ApiResult } from "../../../lib/admin";
 import { useInquiryRefresh } from "../../../lib/useInquiryRefresh";
 import InquiryEvidence from "../../../components/InquiryEvidence";
+import { useLogout } from "../../../lib/useLogout";
+import LogoutFeedback from "../../../components/LogoutFeedback";
 
 type Inquiry = {
   id: number; customer_name: string; contact: string; subject: string; description: string;
@@ -22,6 +24,7 @@ type Notification = { id: number; inquiry_id: number | null; kind: string; messa
 
 export default function HandlerDashboard() {
   const router = useRouter();
+  const { logout, error: logoutError } = useLogout();
   const { resolvedTheme, setTheme } = useTheme();
   const themeMounted = useSyncExternalStore(() => () => {}, () => true, () => false);
   const [user, setUser] = useState<User | null>(null);
@@ -147,13 +150,10 @@ export default function HandlerDashboard() {
     catch (cause) { setError(cause instanceof Error ? cause.message : "Could not load declined inquiries."); }
     finally { setDeclinedLoading(false); }
   }
-  async function logout() {
-    await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000"}/api/auth/logout`, { method: "POST", credentials: "include" });
-    router.replace("/");
-  }
 
   const dark = themeMounted && resolvedTheme === "dark";
   return <main className={`handler-shell${sidebarCollapsed ? " is-collapsed" : ""}`}>
+    <LogoutFeedback error={logoutError} onRetry={() => void logout()}/>
     <aside id="handler-sidebar" className="handler-sidebar">
       <div className="handler-brand"><span className="handler-brand-mark"><Coffee size={21}/></span><div><small>INQUIRY PORTAL</small></div></div>
       <p className="handler-nav-label">WORKSPACE</p>
@@ -171,7 +171,7 @@ export default function HandlerDashboard() {
     </aside>
     <section className="handler-main">
       <header className="handler-topbar"><button className="handler-sidebar-toggle" onClick={() => setSidebarCollapsed((collapsed) => !collapsed)} aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"} aria-expanded={!sidebarCollapsed} aria-controls="handler-sidebar">{sidebarCollapsed ? <PanelLeftOpen/> : <PanelLeftClose/>}</button><div><p>HANDLER WORKSPACE</p><h1>My dashboard</h1></div><div className="handler-top-actions"><label className="handler-global-search"><Search/><input aria-label="Search inquiries" placeholder="Search inquiries..." value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }}/><kbd>/</kbd></label><div className="handler-notification-wrap"><button className="handler-theme handler-bell" onClick={() => { setNotificationsOpen((open) => !open); setProfileOpen(false); }} aria-label={`Notifications${unreadCount ? `, ${unreadCount} unread` : ""}`} aria-expanded={notificationsOpen}><Bell/>{unreadCount > 0 && <i>{unreadCount > 9 ? "9+" : unreadCount}</i>}</button>{notificationsOpen && <section className="handler-notification-panel" aria-label="Notifications"><header><strong>Notifications</strong><span>{unreadCount} unread</span></header>{notifications.length ? notifications.map((item) => <button key={item.id} className={`handler-notification-item${item.read_at ? " read" : ""}`} onClick={() => void markRead(item)}><span className="handler-notification-dot"/><span><strong>{item.kind === "NEW_ASSIGNMENT" ? "New assignment" : readableLabel(item.kind)}</strong><small>{item.message}</small><em>{new Intl.DateTimeFormat("en", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(item.created_at))}</em></span></button>) : <p className="handler-no-notifications">No notifications yet.</p>}</section>}</div><button className="handler-theme" onClick={() => setTheme(dark ? "light" : "dark")} aria-label={dark ? "Switch to light theme" : "Switch to dark theme"}>{dark ? <Sun/> : <Moon/>}</button><div className="handler-profile-top-wrap"><button className="handler-profile-top" onClick={() => { setProfileOpen((open) => !open); setNotificationsOpen(false); }} aria-expanded={profileOpen}><span className="handler-avatar">{user?.fullName.split(/\s+/).map((part) => part[0]).slice(0, 2).join("").toUpperCase() ?? "H"}</span><span className="handler-profile-top-copy"><strong>{user?.fullName ?? "Handler"}</strong><small>{user?.specialization ? `${readableLabel(user.specialization)} Handler` : "Handler"}</small></span><ChevronDown/></button>{profileOpen && <div className="handler-profile-dropdown"><strong>{user?.fullName}</strong><small>{user?.email}</small><button onClick={() => router.push("/dashboard/handler/settings")}><Settings/>Settings</button><button onClick={() => void logout()}><LogOut/>Log out</button></div>}</div></div></header>
-      {error && <div className="handler-feedback handler-error" role="alert"><CircleAlert/>{error}<button onClick={() => setError("")} aria-label="Dismiss"><X/></button></div>}
+      {error && <div className="handler-feedback handler-error" role="alert"><CircleAlert/>{error}<button onClick={() => view === "DECLINED" ? void openDeclined() : void load()}>Retry</button><button onClick={() => setError("")} aria-label="Dismiss"><X/></button></div>}
       {notice && <div className="handler-feedback handler-success" role="status"><Check/>{notice}<button onClick={() => setNotice("")} aria-label="Dismiss"><X/></button></div>}
       <section className="handler-stats" aria-label="Inquiry summary">
         {([["teal", ClipboardList, "Total assigned", stats.total, "Current workload", "ALL"], ["blue", Clock3, "Pending acceptance", stats.pending, "Needs your response", "PENDING"], ["orange", Activity, "In progress", stats.in_progress, "Currently being handled", "IN_PROGRESS"], ["green", CheckCircle2, "Resolved", stats.resolved, "Completed inquiries", "RESOLVED"], ["red", CircleAlert, "Declined", stats.declined, "Returned to admin", "DECLINED"]] as const).map(([tone, Icon, label, count, hint, target]) => <article key={label} className={view === target ? "selected" : ""} role="button" tabIndex={0} aria-pressed={view === target} onClick={() => target === "DECLINED" ? void openDeclined() : (setView(target), setPage(1))} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); if (target === "DECLINED") void openDeclined(); else { setView(target); setPage(1); } } }}><span className={`hs-icon ${tone}`}><Icon/></span><div><small>{label}</small><strong>{loading ? "-" : count}</strong><em>{hint}</em></div></article>)}

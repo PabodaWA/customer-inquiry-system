@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import ThemeToggle from "./ThemeToggle";
+import { logoutSession } from "../lib/logout";
 
 type Role = "ADMIN" | "INTAKE" | "HANDLER";
 
@@ -37,12 +38,19 @@ const rolePaths: Record<Role, string> = {
   HANDLER: "/dashboard/handler",
 };
 
+const inquiryPaths: Record<Role, string> = {
+  ADMIN: "/dashboard/admin/inquiries",
+  INTAKE: "/dashboard/intake/inquiries",
+  HANDLER: "/dashboard/handler",
+};
+
 export default function RoleDashboard({ role, title }: DashboardProps) {
   const router = useRouter();
   const [userName, setUserName] = useState("Loading...");
   const [specialization, setSpecialization] = useState("");
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
@@ -89,12 +97,9 @@ export default function RoleDashboard({ role, title }: DashboardProps) {
   }, [role, router]);
 
   async function handleLogout() {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
-    await fetch(`${apiUrl}/api/auth/logout`, {
-      method: "POST",
-      credentials: "include",
-    });
-    router.replace("/");
+    setError("");
+    try { await logoutSession(); router.replace("/"); }
+    catch { setError("Could not log out because the service is unavailable. Please try again."); }
   }
 
   const counts = {
@@ -116,12 +121,12 @@ export default function RoleDashboard({ role, title }: DashboardProps) {
           <a className="active" href={rolePaths[role]}>
             <span>▦</span> Overview
           </a>
-          {(role === "ADMIN" || role === "INTAKE") && (
-            <a href="/inquiries/new">
+          {role === "INTAKE" && (
+            <a href="/dashboard/intake/new">
               <span>＋</span> New inquiry
             </a>
           )}
-          <a href="/inquiries">
+          <a href={inquiryPaths[role]}>
             <span>□</span> Inquiries
           </a>
         </nav>
@@ -132,6 +137,7 @@ export default function RoleDashboard({ role, title }: DashboardProps) {
       </aside>
 
       <section className="dashboard-main">
+        {error && <p className="login-error" role="alert">{error}<button type="button" onClick={() => void handleLogout()}>Retry</button></p>}
         <header className="dashboard-header">
           <div>
             <p className="dashboard-eyebrow">{role} workspace</p>
@@ -178,8 +184,8 @@ export default function RoleDashboard({ role, title }: DashboardProps) {
                   <p className="dashboard-eyebrow">Inquiry queue</p>
                   <h2>{role === "HANDLER" ? "Assigned to you" : "Recent inquiries"}</h2>
                 </div>
-                {(role === "ADMIN" || role === "INTAKE") && (
-                  <a className="primary-action" href="/inquiries/new">+ Create inquiry</a>
+                {role === "INTAKE" && (
+                  <a className="primary-action" href="/dashboard/intake/new">+ Create inquiry</a>
                 )}
               </div>
 

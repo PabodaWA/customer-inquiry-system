@@ -25,6 +25,8 @@ export default function DeclinedClient() {
   const [detailsLoading, setDetailsLoading] = useState(false);
 
   async function load() {
+    setLoading(true);
+    setError("");
     try {
       const [declinedResult, staffResult, categoryResult] = await Promise.all([
         apiRequest<Reassignment[]>("/api/admin/reassignment-requests"),
@@ -89,10 +91,10 @@ export default function DeclinedClient() {
   return <div className="page-content management-page">
     <div className="management-heading"><div><p className="eyebrow"><span className="eyebrow-dot"/> HANDLER WORK QUEUE</p><h2>Unassigned and declined inquiries</h2><p>Assign an active handler to unassigned inquiries. For declined assignments, review the highlighted reason and change the category if needed.</p></div><span className="record-count">{declined.length} inquiries</span></div>
     {notice && <div className="feedback success-feedback" role="status"><Check size={16}/>{notice}<button aria-label="Dismiss message" onClick={() => setNotice("")}><X size={15}/></button></div>}
-    {error && <div className="feedback error-feedback" role="alert"><AlertCircle size={16}/>{error}<button aria-label="Dismiss error" onClick={() => setError("")}><X size={15}/></button></div>}
+    {error && <div className="feedback error-feedback" role="alert"><AlertCircle size={16}/>{error}<button className="secondary-button" onClick={() => void load()}>Retry</button><button aria-label="Dismiss error" onClick={() => setError("")}><X size={15}/></button></div>}
     <section className="management-card">
       <div className="management-toolbar"><div><strong>Unassigned inquiries</strong><p>Handlers must be active and specialized in the inquiry category.</p></div><span className="record-count">{declined.length} inquiries</span></div>
-      {loading ? <div className="management-state"><LoaderCircle className="state-spinner" size={22}/>Loading inquiriesâ€¦</div> : !declined.length ? <div className="management-state"><UserRoundX size={23}/><strong>No unassigned inquiries</strong><span>New or declined inquiries without a handler will appear here.</span></div> : <div className="table-scroll"><table><thead><tr><th>REFERENCE / CUSTOMER</th><th>CATEGORY</th><th>PREVIOUS HANDLER</th><th>DECLINE REASON</th><th>LAST ACTION</th><th>DETAILS</th></tr></thead><tbody>{declined.map((item) => {
+      {loading ? <div className="management-state"><LoaderCircle className="state-spinner" size={22}/>Loading inquiriesâ€¦</div> : error && !declined.length ? <div className="management-state"><AlertCircle size={22}/><strong>Inquiry queue unavailable</strong><span>{error}</span><button className="secondary-button" onClick={() => void load()}>Try again</button></div> : !declined.length ? <div className="management-state"><UserRoundX size={23}/><strong>No unassigned inquiries</strong><span>New or declined inquiries without a handler will appear here.</span></div> : <div className="table-scroll"><table><thead><tr><th>REFERENCE / CUSTOMER</th><th>CATEGORY</th><th>PREVIOUS HANDLER</th><th>DECLINE REASON</th><th>LAST ACTION</th><th>DETAILS</th></tr></thead><tbody>{declined.map((item) => {
         return <tr key={item.id} className={focusInquiry === item.id ? "target-inquiry" : undefined}><td><strong>{inquiryReference(item.id)}</strong><br/>{item.customer_name}<br/><small>{item.subject}</small></td><td>{readableLabel(item.category)}</td><td>{item.previous_handler ?? "-"}</td><td className={item.handler_response_status === "DECLINED" ? "decline-reason-cell is-declined" : "decline-reason-cell"}>{item.handler_response_status === "DECLINED" ? <><strong>Handler declined</strong><span>{item.decline_reason || "No reason provided"}</span></> : <span>Not previously assigned</span>}</td><td>{displayDate(item.declined_at ?? item.created_at)}</td><td><button className="secondary-button details-button" onClick={() => void showDetails(item)} disabled={detailsLoading}>{detailsLoading ? "Loading..." : <><Eye size={14}/>Inquiry details</>}</button></td></tr>;
       })}</tbody></table></div>}
     </section>

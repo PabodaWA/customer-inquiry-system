@@ -7,6 +7,8 @@ import { Activity, Bell, CalendarDays, CheckCircle2, ChevronDown, ChevronLeft, C
 import ThemeToggle from "../../../../components/ThemeToggle";
 import { apiRequest, displayDate, inquiryReference, readableLabel, type Inquiry, type InquiryStatus } from "../../../../lib/admin";
 import { useInquiryRefresh } from "../../../../lib/useInquiryRefresh";
+import { useLogout } from "../../../../lib/useLogout";
+import LogoutFeedback from "../../../../components/LogoutFeedback";
 import InquiryEvidence from "../../../../components/InquiryEvidence";
 import "../intake.css";
 
@@ -24,6 +26,7 @@ const displayTimestamp = (value: string) => {
 
 export default function IntakeInquiriesPage() {
   const router = useRouter();
+  const { logout, error: logoutError } = useLogout();
   const [user, setUser] = useState<User | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
@@ -128,10 +131,6 @@ export default function IntakeInquiriesPage() {
     setSearch(""); setStatus(""); setCategory(""); setDatePreset("ALL"); setDateFrom(""); setDateTo(""); setAssignment("ALL"); setPage(1);
   }
 
-  async function logout() {
-    await fetch(`${apiUrl}/api/auth/logout`, { method: "POST", credentials: "include" });
-    router.replace("/");
-  }
 
   async function viewDetails(item: Inquiry) {
     setSelected(item); setDetailLoading(true); setHistory([]);
@@ -150,6 +149,7 @@ export default function IntakeInquiriesPage() {
   const endRow = Math.min(page * pageSize, total);
 
   return <div className="intake-app">
+    <LogoutFeedback error={logoutError} onRetry={() => void logout()}/>
     {mobileNav && <button className="intake-scrim" aria-label="Close navigation" onClick={() => setMobileNav(false)} />}
     <aside className={`intake-sidebar ${mobileNav ? "is-open" : ""}`}>
       <Link href="/dashboard/intake" className="intake-brand"><span className="intake-brand-icon"><Coffee size={21}/></span><span><small>INQUIRY PORTAL</small></span><button className="intake-close" aria-label="Close menu" onClick={(event) => { event.preventDefault(); setMobileNav(false); }}><X size={18}/></button></Link>
@@ -164,7 +164,7 @@ export default function IntakeInquiriesPage() {
       <div className="intake-sidebar-profile"><span className="intake-avatar">{initials(user?.fullName ?? "Staff")}</span><span className="intake-profile-name"><strong>{user?.fullName ?? "Intake Staff"}</strong><small>Intake Staff</small></span><button className="intake-logout" aria-label="Log out" onClick={() => void logout()}><LogOut size={17}/></button></div>
     </aside>
     <main className="intake-main">
-      <header className="intake-topbar"><button className="intake-menu" aria-label="Open navigation" onClick={() => setMobileNav(true)}><Menu size={20}/></button><div className="intake-breadcrumb"><span>Workspace</span><ChevronRight size={14}/><strong>My created inquiries</strong></div><div className="intake-top-tools"><label className="intake-global-search"><Search size={17}/><input aria-label="Search inquiries" placeholder="Search inquiries..." value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }}/><kbd>/</kbd></label><button className="intake-icon-button intake-bell" aria-label="Notifications"><Bell size={18}/><i/></button><ThemeToggle className="intake-icon-button"/><div className="intake-profile-menu-wrap"><button className="intake-top-profile" aria-expanded={profileOpen} onClick={() => setProfileOpen((open) => !open)}><span className="intake-avatar">{initials(user?.fullName ?? "Staff")}</span><span><strong>{user?.fullName ?? "Staff"}</strong><small>Intake Staff</small></span><ChevronDown size={15}/></button>{profileOpen && <div className="intake-profile-dropdown"><strong>{user?.fullName ?? "Staff"}</strong><small>{user?.email ?? ""}</small><button onClick={() => void logout()}><LogOut size={14}/> Log out</button></div>}</div></div></header>
+      <header className="intake-topbar"><button className="intake-menu" aria-label="Open navigation" onClick={() => setMobileNav(true)}><Menu size={20}/></button><div className="intake-breadcrumb"><span>Workspace</span><ChevronRight size={14}/><strong>My created inquiries</strong></div><div className="intake-top-tools"><label className="intake-global-search"><Search size={17}/><input aria-label="Search inquiries" placeholder="Search inquiries..." value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }}/><kbd>/</kbd></label><Link className="intake-icon-button intake-bell" aria-label="Notifications" href="/dashboard/intake/notifications"><Bell size={18}/></Link><ThemeToggle className="intake-icon-button"/><div className="intake-profile-menu-wrap"><button className="intake-top-profile" aria-expanded={profileOpen} onClick={() => setProfileOpen((open) => !open)}><span className="intake-avatar">{initials(user?.fullName ?? "Staff")}</span><span><strong>{user?.fullName ?? "Staff"}</strong><small>Intake Staff</small></span><ChevronDown size={15}/></button>{profileOpen && <div className="intake-profile-dropdown"><strong>{user?.fullName ?? "Staff"}</strong><small>{user?.email ?? ""}</small><button onClick={() => void logout()}><LogOut size={14}/> Log out</button></div>}</div></div></header>
       <div className="intake-content all-inquiries-content">
         <div className="intake-heading"><div><p className="intake-kicker">INQUIRY WORKSPACE</p><h1>My created inquiries</h1><p>View and monitor the inquiries you registered.</p></div><div className="all-inquiries-heading-actions"><span className="all-inquiries-total">{loading ? "Loadingâ€¦" : `${stats.total.toLocaleString()} inquiries you created`}</span><Link className="intake-create" href="/dashboard/intake/new"><FilePlus2 size={16}/>Create a new inquiry</Link></div></div>
         <section className="intake-stats all-inquiries-stats" aria-label="Inquiry statistics">

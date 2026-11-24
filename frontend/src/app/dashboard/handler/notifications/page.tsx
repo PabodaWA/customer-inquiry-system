@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { Bell, Check, CheckCheck, ChevronRight, ClipboardList, Coffee, LogOut } from "lucide-react";
 import ThemeToggle from "../../../../components/ThemeToggle";
 import { API_BASE, apiRequest, inquiryReference, readableLabel, type ApiResult } from "../../../../lib/admin";
+import { useLogout } from "../../../../lib/useLogout";
+import LogoutFeedback from "../../../../components/LogoutFeedback";
 
 type User = { fullName: string; email: string; role: string; specialization?: string };
 type Notification = { id: number; inquiry_id: number | null; kind: string; message: string; created_at: string; read_at: string | null };
@@ -19,6 +21,7 @@ const dateLabel = (value: string) => {
 
 export default function HandlerNotificationsPage() {
   const router = useRouter();
+  const { logout, error: logoutError } = useLogout();
   const [user, setUser] = useState<User | null>(null);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -32,6 +35,14 @@ export default function HandlerNotificationsPage() {
     setNotifications(result.data ?? []);
     setUnreadCount(result.unread_count ?? 0);
   }, []);
+
+  async function retryLoad() {
+    setLoading(true);
+    setError("");
+    try { await loadNotifications(); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "Could not load notifications."); }
+    finally { setLoading(false); }
+  }
 
   useEffect(() => {
     let active = true;
@@ -51,10 +62,6 @@ export default function HandlerNotificationsPage() {
     return () => { active = false; window.clearInterval(interval); };
   }, [loadNotifications, router]);
 
-  async function logout() {
-    await fetch(`${API_BASE}/api/auth/logout`, { method: "POST", credentials: "include" });
-    router.replace("/");
-  }
 
   async function markRead(item: Notification) {
     if (item.read_at) return;
@@ -85,6 +92,7 @@ export default function HandlerNotificationsPage() {
   const initials = (user?.fullName ?? "Handler").split(/\s+/).slice(0, 2).map((part) => part[0] ?? "").join("").toUpperCase();
 
   return <main className="handler-shell">
+    <LogoutFeedback error={logoutError} onRetry={() => void logout()}/>
     <aside className="handler-sidebar">
       <div className="handler-brand"><span className="handler-brand-mark"><Coffee size={21}/></span><div><small>INQUIRY PORTAL</small></div></div>
       <p className="handler-nav-label">WORKSPACE</p>
@@ -98,7 +106,7 @@ export default function HandlerNotificationsPage() {
       <header className="handler-topbar"><div><p>HANDLER WORKSPACE</p><h1>Notifications</h1></div><div className="handler-top-actions"><ThemeToggle className="handler-theme"/><Link className="handler-notification-back" href="/dashboard/handler">Back to dashboard</Link></div></header>
       <div className="handler-notifications-content">
         <div className="handler-notifications-heading"><div><span className="handler-kicker">INBOX</span><h2>Your notifications</h2><p>Updates about assignments and inquiries you handle.</p></div><button className="handler-mark-all" onClick={() => void markAllRead()} disabled={saving || unreadCount === 0}><CheckCheck/>Mark all as read</button></div>
-        {error && <div className="handler-feedback handler-error" role="alert">{error}</div>}
+        {error && <div className="handler-feedback handler-error" role="alert">{error}<button onClick={() => void retryLoad()}>Retry</button></div>}
         <section className="handler-notifications-card">
           <header className="handler-notifications-toolbar"><div className="handler-notification-filters" aria-label="Filter notifications">{(["ALL", "UNREAD", "READ"] as const).map((value) => <button key={value} className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>{readableLabel(value)}{value === "UNREAD" && unreadCount > 0 && <span>{unreadCount}</span>}</button>)}</div><span>{unreadCount} unread</span></header>
           {loading ? <div className="handler-empty">Loading notifications...</div> : filtered.length === 0 ? <div className="handler-notifications-empty"><span><Bell/></span><strong>{filter === "UNREAD" ? "You’re all caught up" : "No notifications yet"}</strong><p>{filter === "UNREAD" ? "New assignment updates will show here." : "Updates about inquiries assigned to you will show here."}</p></div> : <div className="handler-notification-list">{filtered.map((item) => <article key={item.id} className={`handler-notification-card${item.read_at ? " is-read" : " is-unread"}`}><span className="handler-notification-status" aria-hidden="true"/><div className="handler-notification-copy"><div className="handler-notification-meta"><span>{readableLabel(item.kind)}</span><time dateTime={item.created_at}>{dateLabel(item.created_at)}</time></div><p>{item.message}</p>{item.inquiry_id && <Link href="/dashboard/handler" className="handler-notification-inquiry">Inquiry {inquiryReference(item.inquiry_id)} <ChevronRight/></Link>}</div>{!item.read_at && <button className="handler-mark-read" onClick={() => void markRead(item)} disabled={saving}><Check/>Mark read</button>}</article>)}</div>}

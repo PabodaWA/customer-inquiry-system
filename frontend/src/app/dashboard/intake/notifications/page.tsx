@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { Bell, Check, CheckCheck, ChevronDown, ChevronRight, Coffee, FilePlus2, LayoutDashboard, ClipboardList, LogOut, Menu, Settings, X } from "lucide-react";
 import ThemeToggle from "../../../../components/ThemeToggle";
 import { API_BASE, apiRequest, inquiryReference, readableLabel, type ApiResult } from "../../../../lib/admin";
+import { useLogout } from "../../../../lib/useLogout";
+import LogoutFeedback from "../../../../components/LogoutFeedback";
 import "../intake.css";
 
 type User = { id: number; fullName: string; email: string; role: string };
@@ -16,6 +18,7 @@ const dateLabel = (value: string) => { const date = new Date(value); return Numb
 
 export default function IntakeNotificationsPage() {
   const router = useRouter();
+  const { logout, error: logoutError } = useLogout();
   const [user, setUser] = useState<User | null>(null);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -31,6 +34,14 @@ export default function IntakeNotificationsPage() {
     setNotifications(result.data ?? []);
     setUnreadCount(result.unread_count ?? 0);
   }, []);
+
+  async function retryLoad() {
+    setLoading(true);
+    setError("");
+    try { await loadNotifications(); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "Could not load notifications."); }
+    finally { setLoading(false); }
+  }
 
   useEffect(() => {
     let active = true;
@@ -50,7 +61,6 @@ export default function IntakeNotificationsPage() {
     return () => { active = false; window.clearInterval(interval); };
   }, [loadNotifications, router]);
 
-  async function logout() { await fetch(`${API_BASE}/api/auth/logout`, { method: "POST", credentials: "include" }); router.replace("/"); }
   async function markRead(item: Notification) {
     if (item.read_at) return;
     setSaving(true); setError("");
@@ -78,6 +88,7 @@ export default function IntakeNotificationsPage() {
   const filtered = useMemo(() => notifications.filter((item) => filter === "ALL" || (filter === "UNREAD" ? !item.read_at : Boolean(item.read_at))), [notifications, filter]);
 
   return <div className="intake-app">
+    <LogoutFeedback error={logoutError} onRetry={() => void logout()}/>
     {mobileNav && <button className="intake-scrim" aria-label="Close navigation" onClick={() => setMobileNav(false)} />}
     <aside className={`intake-sidebar ${mobileNav ? "is-open" : ""}`}>
       <Link href="/dashboard/intake" className="intake-brand"><span className="intake-brand-icon"><Coffee size={21}/></span><span><small>INQUIRY PORTAL</small></span><button className="intake-close" aria-label="Close menu" onClick={(event) => { event.preventDefault(); setMobileNav(false); }}><X size={18}/></button></Link>
@@ -90,7 +101,7 @@ export default function IntakeNotificationsPage() {
       <header className="intake-topbar"><button className="intake-menu" aria-label="Open navigation" onClick={() => setMobileNav(true)}><Menu size={20}/></button><div className="intake-breadcrumb"><Link href="/dashboard/intake">Workspace</Link><ChevronRight size={14}/><strong>Notifications</strong></div><div className="intake-top-tools"><ThemeToggle className="intake-icon-button"/><div className="intake-profile-menu-wrap"><button className="intake-top-profile" aria-expanded={profileOpen} onClick={() => setProfileOpen((open) => !open)}><span className="intake-avatar">{initials(user?.fullName ?? "Staff")}</span><span><strong>{user?.fullName ?? "Staff"}</strong><small>Intake Staff</small></span><ChevronDown size={15}/></button>{profileOpen && <div className="intake-profile-dropdown"><strong>{user?.fullName ?? "Staff"}</strong><small>{user?.email ?? ""}</small><button onClick={() => void logout()}><LogOut size={14}/> Log out</button></div>}</div></div></header>
       <div className="intake-content intake-notifications-content">
         <div className="intake-heading"><div><p className="intake-kicker">INBOX</p><h1>Notifications</h1><p>Updates about inquiries you submitted and their progress.</p></div><Link className="intake-create" href="/dashboard/intake/inquiries"><ClipboardList size={16}/>My inquiries</Link></div>
-        {error && <div className="new-form-error" role="alert"><X size={16}/>{error}</div>}
+        {error && <div className="new-form-error" role="alert"><X size={16}/>{error}<button onClick={() => void retryLoad()}>Retry</button></div>}
         <section className="intake-notifications-card"><header className="intake-notifications-toolbar"><div className="intake-notification-filters" aria-label="Filter notifications">{(["ALL", "UNREAD", "READ"] as const).map((value) => <button key={value} className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>{readableLabel(value)}{value === "UNREAD" && unreadCount > 0 && <span>{unreadCount}</span>}</button>)}</div><button className="intake-mark-all" onClick={() => void markAllRead()} disabled={saving || unreadCount === 0}><CheckCheck size={15}/>Mark all as read</button></header>
           {loading ? <div className="intake-empty">Loading notificationsâ€¦</div> : filtered.length === 0 ? <div className="intake-notifications-empty"><span><Bell size={22}/></span><strong>{filter === "UNREAD" ? "Youâ€™re all caught up" : "No notifications yet"}</strong><p>{filter === "UNREAD" ? "New inquiry updates will show here." : "Updates about your submitted inquiries will show here."}</p></div> : <div className="intake-notification-list">{filtered.map((item) => <article key={item.id} className={`intake-notification-card${item.read_at ? " is-read" : " is-unread"}`}><span className="intake-notification-status" aria-hidden="true"/><div className="intake-notification-copy"><div className="intake-notification-meta"><span>{readableLabel(item.kind)}</span><time dateTime={item.created_at}>{dateLabel(item.created_at)}</time></div><p>{item.message}</p>{item.inquiry_id && <Link href="/dashboard/intake/inquiries" className="intake-notification-inquiry">Inquiry {inquiryReference(item.inquiry_id)} <ChevronRight size={14}/></Link>}</div>{!item.read_at && <button className="intake-mark-read" onClick={() => void markRead(item)} disabled={saving}><Check size={15}/>Mark read</button>}</article>)}</div>}
         </section>
