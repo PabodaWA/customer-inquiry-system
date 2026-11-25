@@ -61,7 +61,8 @@ CREATE TABLE IF NOT EXISTS public.inquiries (
   responded_at TIMESTAMP WITHOUT TIME ZONE,
   accepted_at TIMESTAMP WITHOUT TIME ZONE,
   resolved_at TIMESTAMP WITHOUT TIME ZONE,
-  customer_email VARCHAR(255)
+  customer_email VARCHAR(255),
+  customer_informed BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 CREATE INDEX IF NOT EXISTS idx_inquiries_status

@@ -9,6 +9,7 @@ const {
   getAllInquiries,
   getInquiryCategories,
   getRecentInquiryActivity,
+  setCustomerInformed,
   getInquiryById,
   updateInquiryStatus,
   assignInquiry,
@@ -29,6 +30,7 @@ router.post("/", createInquiry);
 // 2. Read-only category options for authenticated inquiry forms and filters
 router.get("/categories", getInquiryCategories);
 router.get("/activity", getRecentInquiryActivity);
+router.patch("/:id/customer-informed", setCustomerInformed);
 router.get("/handler-dashboard", authorizeRoles("HANDLER"), getDashboard);
 router.get("/handler-dashboard/declined", authorizeRoles("HANDLER"), getMyDeclinedInquiries);
 router.get("/:id/assignments", getAssignmentHistory);

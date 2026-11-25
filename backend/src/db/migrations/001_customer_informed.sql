@@ -1,0 +1,6 @@
+BEGIN;
+
+ALTER TABLE public.inquiries
+  ADD COLUMN IF NOT EXISTS customer_informed BOOLEAN NOT NULL DEFAULT FALSE;
+
+COMMIT;

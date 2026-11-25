@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Activity, Bell, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ClipboardList, Eye, FilePlus2, Inbox, LayoutDashboard, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Search, Settings, UserRound, X } from "lucide-react";
+import { Activity, Bell, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ClipboardList, Eye, FilePlus2, Inbox, LayoutDashboard, LogOut, Menu, MessageCircle, PanelLeftClose, PanelLeftOpen, Search, Settings, UserRound, X } from "lucide-react";
 import ThemeToggle from "../../../components/ThemeToggle";
 import InquiryEvidence from "../../../components/InquiryEvidence";
 import { useInquiryRefresh } from "../../../lib/useInquiryRefresh";
@@ -12,7 +12,7 @@ import LogoutFeedback from "../../../components/LogoutFeedback";
 import "./intake.css";
 
 type Status = "NEW" | "IN_PROGRESS" | "RESOLVED";
-type Inquiry = { id: number; customer_name: string; subject: string; category: string; status: Status; created_at: string; contact: string; customer_email?: string | null; description?: string; assigned_to?: number | null; assigned_staff_name?: string | null; assignment_status?: "PENDING" | "ASSIGNED"; evidence_files?: { id: number; file_name: string; mime_type: string; data_url: string }[] };
+type Inquiry = { id: number; customer_name: string; subject: string; category: string; status: Status; created_at: string; resolved_at?: string | null; contact: string; customer_informed?: boolean; customer_email?: string | null; description?: string; assigned_to?: number | null; assigned_staff_name?: string | null; assignment_status?: "PENDING" | "ASSIGNED"; evidence_files?: { id: number; file_name: string; mime_type: string; data_url: string }[] };
 type ActivityEvent = { id: number; inquiry_id: number; action: string; old_value?: string | null; new_value?: string | null; customer_name: string; created_at: string; changed_by_name?: string | null };
 type Notification = { id: number; inquiry_id: number | null; kind: string; message: string; created_at: string; read_at: string | null };
 type User = { id: number; fullName: string; email: string; role: string };
@@ -140,8 +140,9 @@ export default function IntakeDashboard() {
       <div className="intake-nav-label">WORKSPACE</div>
       <nav className="intake-nav" aria-label="Main navigation">
         <Link className="current" href="/dashboard/intake"><LayoutDashboard size={18}/>Dashboard</Link>
-        <Link href="/dashboard/intake/inquiries"><ClipboardList size={18}/>My created inquiries</Link>
         <Link href="/dashboard/intake/new"><FilePlus2 size={18}/>New inquiry</Link>
+        <Link href="/dashboard/intake/inquiries"><ClipboardList size={18}/>My created inquiries</Link>
+        <Link href="/dashboard/intake/follow-up"><MessageCircle size={18}/>Customer follow-up</Link>
         <Link href="/dashboard/intake/notifications"><Bell size={18}/>Notifications{unreadCount > 0 && <span className="intake-nav-unread">{unreadCount > 9 ? "9+" : unreadCount}</span>}</Link>
       </nav>
       <div className="intake-nav-label settings-label">PREFERENCES</div><nav className="intake-nav"><Link href="/dashboard/intake/settings"><Settings size={18}/>Settings</Link></nav>

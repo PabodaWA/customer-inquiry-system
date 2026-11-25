@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Activity, Bell, CalendarDays, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, ClipboardList, Eye, FilePlus2, FilterX, Inbox, LayoutDashboard, LogOut, Menu, Search, Settings, X } from "lucide-react";
+import { Activity, Bell, CalendarDays, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, ClipboardList, Eye, FilePlus2, FilterX, Inbox, LayoutDashboard, LogOut, Menu, MessageCircle, Search, Settings, X } from "lucide-react";
 import ThemeToggle from "../../../../components/ThemeToggle";
 import { apiRequest, displayDate, inquiryReference, readableLabel, type Inquiry, type InquiryStatus } from "../../../../lib/admin";
 import { useInquiryRefresh } from "../../../../lib/useInquiryRefresh";
@@ -156,8 +156,9 @@ export default function IntakeInquiriesPage() {
       <div className="intake-nav-label">WORKSPACE</div>
       <nav className="intake-nav" aria-label="Main navigation">
         <Link href="/dashboard/intake"><LayoutDashboard size={18}/>Dashboard</Link>
-        <Link className="current" aria-current="page" href="/dashboard/intake/inquiries"><ClipboardList size={18}/>My created inquiries</Link>
         <Link href="/dashboard/intake/new"><FilePlus2 size={18}/>New inquiry</Link>
+        <Link className="current" aria-current="page" href="/dashboard/intake/inquiries"><ClipboardList size={18}/>My created inquiries</Link>
+        <Link href="/dashboard/intake/follow-up"><MessageCircle size={18}/>Customer follow-up</Link>
         <Link href="/dashboard/intake/notifications"><Bell size={18}/>Notifications</Link>
       </nav>
       <div className="intake-nav-label settings-label">PREFERENCES</div><nav className="intake-nav"><Link href="/dashboard/intake/settings"><Settings size={18}/>Settings</Link></nav>

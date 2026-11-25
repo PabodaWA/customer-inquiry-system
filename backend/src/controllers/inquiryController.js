@@ -536,6 +536,26 @@ const getInquiryById = async (req, res) => {
 
 };
 
+const setCustomerInformed = async (req, res) => {
+  const user = getCurrentUser(req);
+  const { id } = req.params;
+  const { informed } = req.body ?? {};
+  if (user?.role !== "INTAKE") return res.status(403).json({ success: false, message: "Only intake staff can update customer notification status." });
+  if (!isValidId(id)) return res.status(400).json({ success: false, message: "Invalid inquiry ID." });
+  if (typeof informed !== "boolean") return res.status(400).json({ success: false, message: "Informed must be true or false." });
+  try {
+    const result = await pool.query(
+      "UPDATE inquiries SET customer_informed=$1, updated_at=CURRENT_TIMESTAMP WHERE id=$2 AND created_by=$3 AND status='RESOLVED' RETURNING id, customer_informed",
+      [informed, id, user.id]
+    );
+    if (!result.rowCount) return res.status(404).json({ success: false, message: "Resolved inquiry not found." });
+    return res.status(200).json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    console.error("Set Customer Informed Error:", error);
+    return res.status(500).json({ success: false, message: "Failed to update customer notification status." });
+  }
+};
+
 
 // ==========================================
 // 5. UPDATE INQUIRY STATUS
@@ -695,5 +715,6 @@ module.exports = {
   updateInquiryStatus,
   assignInquiry,
   getInquiryHistory,
-  getRecentInquiryActivity
+  getRecentInquiryActivity,
+  setCustomerInformed
 };

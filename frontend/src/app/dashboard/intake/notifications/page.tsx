@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Bell, Check, CheckCheck, ChevronDown, ChevronRight, FilePlus2, LayoutDashboard, ClipboardList, LogOut, Menu, Settings, X } from "lucide-react";
+import { Bell, Check, CheckCheck, ChevronDown, ChevronRight, FilePlus2, LayoutDashboard, ClipboardList, LogOut, Menu, MessageCircle, Settings, X } from "lucide-react";
 import ThemeToggle from "../../../../components/ThemeToggle";
 import { API_BASE, apiRequest, inquiryReference, readableLabel, type ApiResult } from "../../../../lib/admin";
 import { useLogout } from "../../../../lib/useLogout";
@@ -94,7 +94,7 @@ export default function IntakeNotificationsPage() {
     <aside className={`intake-sidebar ${mobileNav ? "is-open" : ""}`}>
       <Link href="/dashboard/intake" className="intake-brand"><span className="intake-brand-icon"><img src="/cofee.png" alt="" /></span><span><small>INQUIRY PORTAL</small></span><button className="intake-close" aria-label="Close menu" onClick={(event) => { event.preventDefault(); setMobileNav(false); }}><X size={18}/></button></Link>
       <div className="intake-nav-label">WORKSPACE</div><nav className="intake-nav" aria-label="Main navigation">
-        <Link href="/dashboard/intake"><LayoutDashboard size={18}/>Dashboard</Link><Link href="/dashboard/intake/inquiries"><ClipboardList size={18}/>My created inquiries</Link><Link href="/dashboard/intake/new"><FilePlus2 size={18}/>New inquiry</Link><Link className="current" aria-current="page" href="/dashboard/intake/notifications"><Bell size={18}/>Notifications{unreadCount > 0 && <span className="intake-nav-unread">{unreadCount > 9 ? "9+" : unreadCount}</span>}</Link>
+        <Link href="/dashboard/intake"><LayoutDashboard size={18}/>Dashboard</Link><Link href="/dashboard/intake/new"><FilePlus2 size={18}/>New inquiry</Link><Link href="/dashboard/intake/inquiries"><ClipboardList size={18}/>My created inquiries</Link><Link href="/dashboard/intake/follow-up"><MessageCircle size={18}/>Customer follow-up</Link><Link className="current" aria-current="page" href="/dashboard/intake/notifications"><Bell size={18}/>Notifications{unreadCount > 0 && <span className="intake-nav-unread">{unreadCount > 9 ? "9+" : unreadCount}</span>}</Link>
       </nav><div className="intake-nav-label settings-label">PREFERENCES</div><nav className="intake-nav"><Link href="/dashboard/intake/settings"><Settings size={18}/>Settings</Link></nav>
       <div className="intake-sidebar-profile"><span className="intake-avatar">{initials(user?.fullName ?? "Staff")}</span><span className="intake-profile-name"><strong>{user?.fullName ?? "Intake Staff"}</strong><small>Intake Staff</small></span><button className="intake-logout" aria-label="Log out" onClick={() => void logout()}><LogOut size={17}/></button></div>
     </aside>

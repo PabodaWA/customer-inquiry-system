@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Bell, Check, ChevronDown, ChevronRight, ClipboardList, FilePlus2, LayoutDashboard, LogOut, Mail, Menu, Settings as SettingsIcon, ShieldCheck, UserRound, X } from "lucide-react";
+import { Bell, Check, ChevronDown, ChevronRight, ClipboardList, FilePlus2, LayoutDashboard, LogOut, Mail, Menu, MessageCircle, Settings as SettingsIcon, ShieldCheck, UserRound, X } from "lucide-react";
 import ThemeToggle from "../../../../components/ThemeToggle";
 import ChangePasswordForm from "../../../../components/ChangePasswordForm";
 import { useLogout } from "../../../../lib/useLogout";
@@ -49,8 +49,9 @@ export default function IntakeSettingsPage() {
       <Link href="/dashboard/intake" className="intake-brand"><span className="intake-brand-icon"><img src="/cofee.png" alt="" /></span><span><small>INQUIRY PORTAL</small></span><button className="intake-close" aria-label="Close menu" onClick={(event) => { event.preventDefault(); setMobileNav(false); }}><X size={18}/></button></Link>
       <div className="intake-nav-label">WORKSPACE</div><nav className="intake-nav" aria-label="Main navigation">
         <Link href="/dashboard/intake"><LayoutDashboard size={18}/>Dashboard</Link>
-        <Link href="/dashboard/intake/inquiries"><ClipboardList size={18}/>My created inquiries</Link>
         <Link href="/dashboard/intake/new"><FilePlus2 size={18}/>New inquiry</Link>
+        <Link href="/dashboard/intake/inquiries"><ClipboardList size={18}/>My created inquiries</Link>
+        <Link href="/dashboard/intake/follow-up"><MessageCircle size={18}/>Customer follow-up</Link>
         <Link href="/dashboard/intake/notifications"><Bell size={18}/>Notifications</Link>
       </nav><div className="intake-nav-label settings-label">PREFERENCES</div><nav className="intake-nav"><Link className="current" aria-current="page" href="/dashboard/intake/settings"><SettingsIcon size={18}/>Settings</Link></nav>
       <div className="intake-sidebar-profile"><span className="intake-avatar">{initials(user?.fullName ?? "Staff")}</span><span className="intake-profile-name"><strong>{user?.fullName ?? "Intake Staff"}</strong><small>Intake Staff</small></span><button className="intake-logout" aria-label="Log out" onClick={() => void logout()}><LogOut size={17}/></button></div>
