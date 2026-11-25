@@ -14,6 +14,24 @@ The repository contains a **Next.js frontend** and an **Express/PostgreSQL API**
 - Sessions are stored in PostgreSQL. Passwords are hashed with bcrypt.
 - Inquiry lists support search, filters, and pagination.
 
+## Screenshots
+
+### Sign-in
+
+![Customer Inquiry System sign-in page](frontend/public/1.png)
+
+### Intake dashboard
+
+![Intake staff dashboard](frontend/public/2.png)
+
+### Admin dashboard
+
+![Admin dashboard](frontend/public/3.png)
+
+### Handler dashboard
+
+![Handler dashboard](frontend/public/4.png)
+
 ## Technology
 
 | Area | Tools |
