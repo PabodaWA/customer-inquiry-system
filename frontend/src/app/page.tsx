@@ -17,6 +17,7 @@ export default function Home() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [showPasswordHelp, setShowPasswordHelp] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -88,6 +89,20 @@ export default function Home() {
             onChange={(event) => setPassword(event.target.value)}
             required
           />
+
+          <button
+            className="login-password-help-trigger"
+            type="button"
+            onClick={() => setShowPasswordHelp((visible) => !visible)}
+            aria-expanded={showPasswordHelp}
+          >
+            Forgot password?
+          </button>
+          {showPasswordHelp && (
+            <p className="login-password-help" role="status">
+              Please contact your company administrator for help resetting your password.
+            </p>
+          )}
 
           {error && <p className="login-error" role="alert">{error}</p>}
 

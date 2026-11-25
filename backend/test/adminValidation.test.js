@@ -56,6 +56,23 @@ test("staff status changes require a boolean and a valid staff ID", async (t) =>
   assert.equal(invalidIdResponse.statusCode, 400);
 });
 
+test("active staff accounts must be deactivated before deletion", async (t) => {
+  const originalQuery = pool.query;
+  const queries = [];
+  pool.query = async (sql, values) => {
+    queries.push({ sql, values });
+    return { rows: [{ id: 4, full_name: "Test User", is_active: true }] };
+  };
+  t.after(() => { pool.query = originalQuery; });
+  const response = mockResponse();
+
+  await controller.deleteStaff({ params: { id: "4" } }, response);
+
+  assert.equal(response.statusCode, 409);
+  assert.match(response.body.message, /deactivate this account/i);
+  assert.equal(queries.length, 1);
+});
+
 test("invalid staff email or role is rejected before database access", async (t) => {
   const originalQuery = pool.query;
   pool.query = async () => { throw new Error("Database should not be queried for invalid staff input."); };

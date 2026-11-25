@@ -121,8 +121,11 @@ async function deleteStaff(req, res) {
   const { id } = req.params;
   if (!isValidId(id)) return res.status(400).json({ success: false, message: "Invalid staff ID." });
   try {
-    const staff = await pool.query("SELECT id, full_name FROM users WHERE id=$1 AND role IN ('INTAKE','HANDLER')", [id]);
+    const staff = await pool.query("SELECT id, full_name, is_active FROM users WHERE id=$1 AND role IN ('INTAKE','HANDLER')", [id]);
     if (!staff.rows.length) return res.status(404).json({ success: false, message: "Staff member not found." });
+    if (staff.rows[0].is_active) {
+      return res.status(409).json({ success: false, message: "Deactivate this account before deleting it." });
+    }
     const references = await pool.query(
       `SELECT
          (SELECT COUNT(*) FROM inquiries WHERE assigned_to=$1 OR created_by=$1) +
@@ -133,9 +136,15 @@ async function deleteStaff(req, res) {
     if (Number(references.rows[0].count) > 0) {
       return res.status(409).json({ success: false, message: "This account is linked to inquiry records. Deactivate it instead to preserve the inquiry history." });
     }
+    const deleted = await pool.query(
+      "DELETE FROM users WHERE id=$1 AND role IN ('INTAKE','HANDLER') AND is_active=FALSE RETURNING id",
+      [id]
+    );
+    if (!deleted.rows.length) {
+      return res.status(409).json({ success: false, message: "Deactivate this account before deleting it." });
+    }
     await pool.query("UPDATE assignment_state SET last_assigned_handler_id=NULL WHERE last_assigned_handler_id=$1", [id]);
     await pool.query("DELETE FROM user_sessions WHERE sess::jsonb->'user'->>'id' = $1", [String(id)]);
-    await pool.query("DELETE FROM users WHERE id=$1 AND role IN ('INTAKE','HANDLER')", [id]);
     return res.status(200).json({ success: true, message: `${staff.rows[0].full_name} was deleted.` });
   } catch (error) {
     if (error.code === "23503") return res.status(409).json({ success: false, message: "This account is linked to inquiry records. Deactivate it instead to preserve the inquiry history." });

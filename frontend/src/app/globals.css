@@ -137,6 +137,29 @@ button, input { font: inherit; }
 .login-form input::placeholder { color: #829692; }
 .login-form input:focus { border-color: #1cbf9d; box-shadow: 0 0 0 3px rgb(28 191 157 / 18%); }
 
+.login-password-help-trigger {
+  align-self: flex-end;
+  margin: -12px 0 16px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #277b75;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+.login-password-help {
+  margin: -4px 0 16px;
+  padding: 10px 12px;
+  border-radius: 4px;
+  background: rgb(39 123 117 / 9%);
+  color: #284b4b;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .login-button {
   min-height: 50px;
   margin-top: 4px;
