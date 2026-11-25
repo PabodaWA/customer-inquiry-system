@@ -1,4 +1,4 @@
-# Coffee Ninja Customer Inquiry System
+# Customer Inquiry System
 
 A role based customer inquiry portal for registering customer requests, routing work to the right handler, and tracking each inquiry through resolution.
 
