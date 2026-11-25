@@ -13,11 +13,16 @@ const notificationRoutes = require("./routes/notificationRoutes");
 
 const app = express();
 
+const frontendUrl = process.env.FRONTEND_URL?.trim();
+if (!frontendUrl) {
+  throw new Error("FRONTEND_URL is missing in .env");
+}
+
 app.use(helmet());
 
 app.use(
   cors({
-    origin: "http://localhost:3000",
+    origin: frontendUrl,
     credentials: true,
   })
 );

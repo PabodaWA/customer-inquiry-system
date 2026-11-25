@@ -2,10 +2,13 @@
 
 ## Assumptions
 
-- Intake staff are responsible for registering customer inquiries; handlers work only on inquiries assigned to them; admins manage staff, categories, and reassignment.
-- An inquiry should be routed to an active handler whose specialization matches its category. If none is available, the inquiry remains pending for later admin action.
-- Inquiry history and evidence need to remain available to users authorized to view that inquiry.
-- This project extends an existing PostgreSQL baseline schema. The repository migrations are incremental and assume core tables already exist.
+Intake staff are responsible for registering customer inquiries; handlers work only on inquiries assigned to them; admins manage staff, categories, and reassignment.
+
+An inquiry should be routed to an active handler whose specialization matches its category. If none is available, the inquiry remains pending for later admin action.
+
+Inquiry history and evidence need to remain available to users authorized to view that inquiry.
+
+The repository includes a baseline PostgreSQL schema migration that allows a developer to initialize the application using a new empty database.
 
 ## Design choices
 
@@ -27,4 +30,4 @@ Evidence files are validated and stored in PostgreSQL as binary data, then retur
 
 ## What I would improve next
 
-Add a complete baseline schema migration, including the core user, inquiry, history, and assignment-state tables, so a new developer can initialize a database from this repository alone. After that, add integration tests against a disposable PostgreSQL database and make the frontend CORS origin configurable for deployment.
+I would add integration tests against a disposable PostgreSQL database to verify the complete inquiry lifecycle, authentication, authorization, and database transactions. I would also make the backend CORS origin configurable through environment variables to simplify deployment. Additionally, I would expand frontend tests to cover the main staff workflows, including login, inquiry creation, and status updates.
