@@ -1,7 +1,7 @@
 ﻿"use client";
 
-import { useEffect, useState } from "react";
-import { AlertCircle, Check, Eye, LoaderCircle, UserRoundX, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { AlertCircle, Check, Eye, FilterX, LoaderCircle, Search, UserRoundX, X } from "lucide-react";
 import { apiRequest, displayDate, inquiryReference, readableLabel } from "../../../../lib/admin";
 import InquiryEvidence from "../../../../components/InquiryEvidence";
 
@@ -14,6 +14,9 @@ export default function DeclinedClient() {
   const [declined, setDeclined] = useState<Reassignment[]>([]);
   const [handlers, setHandlers] = useState<Handler[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("");
+  const [assignmentFilter, setAssignmentFilter] = useState("");
   const [reassignTo, setReassignTo] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<number | null>(null);
@@ -23,6 +26,16 @@ export default function DeclinedClient() {
   const [details, setDetails] = useState<InquiryDetails | null>(null);
   const [history, setHistory] = useState<InquiryEvent[]>([]);
   const [detailsLoading, setDetailsLoading] = useState(false);
+
+  const filtered = useMemo(() => {
+    const query = searchQuery.trim().toLocaleLowerCase();
+    return declined.filter((item) => {
+      const matchesSearch = !query || [inquiryReference(item.id), item.customer_name, item.subject, item.category, item.previous_handler, item.decline_reason]
+        .some((value) => value?.toLocaleLowerCase().includes(query));
+      const matchesAssignment = !assignmentFilter || (assignmentFilter === "DECLINED" ? item.handler_response_status === "DECLINED" : item.handler_response_status !== "DECLINED");
+      return matchesSearch && (!categoryFilter || item.category === categoryFilter) && matchesAssignment;
+    });
+  }, [declined, searchQuery, categoryFilter, assignmentFilter]);
 
   async function load() {
     setLoading(true);
@@ -93,8 +106,8 @@ export default function DeclinedClient() {
     {notice && <div className="feedback success-feedback" role="status"><Check size={16}/>{notice}<button aria-label="Dismiss message" onClick={() => setNotice("")}><X size={15}/></button></div>}
     {error && <div className="feedback error-feedback" role="alert"><AlertCircle size={16}/>{error}<button className="secondary-button" onClick={() => void load()}>Retry</button><button aria-label="Dismiss error" onClick={() => setError("")}><X size={15}/></button></div>}
     <section className="management-card">
-      <div className="management-toolbar"><div><strong>Unassigned inquiries</strong><p>Handlers must be active and specialized in the inquiry category.</p></div><span className="record-count">{declined.length} inquiries</span></div>
-      {loading ? <div className="management-state"><LoaderCircle className="state-spinner" size={22}/>Loading inquiriesâ€¦</div> : error && !declined.length ? <div className="management-state"><AlertCircle size={22}/><strong>Inquiry queue unavailable</strong><span>{error}</span><button className="secondary-button" onClick={() => void load()}>Try again</button></div> : !declined.length ? <div className="management-state"><UserRoundX size={23}/><strong>No unassigned inquiries</strong><span>New or declined inquiries without a handler will appear here.</span></div> : <div className="table-scroll"><table><thead><tr><th>REFERENCE / CUSTOMER</th><th>CATEGORY</th><th>PREVIOUS HANDLER</th><th>DECLINE REASON</th><th>LAST ACTION</th><th>DETAILS</th></tr></thead><tbody>{declined.map((item) => {
+      <div className="management-toolbar management-toolbar-stack"><div className="management-toolbar-heading"><div><strong>Unassigned inquiries</strong><p>Handlers must be active and specialized in the inquiry category.</p></div><span className="record-count">{filtered.length} {filtered.length === 1 ? "inquiry" : "inquiries"}</span></div><div className="filter-controls"><label className="inquiry-search"><span>Search inquiries</span><span className="inquiry-search-input"><Search size={15}/><input type="search" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Reference, customer, reason…" aria-label="Search declined inquiries"/></span></label><label><span>Category</span><select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}><option value="">All categories</option>{Array.from(new Set(declined.map((item) => item.category))).sort().map((category) => <option key={category} value={category}>{readableLabel(category)}</option>)}</select></label><label><span>Assignment</span><select value={assignmentFilter} onChange={(event) => setAssignmentFilter(event.target.value)}><option value="">All queue items</option><option value="DECLINED">Previously declined</option><option value="UNASSIGNED">Never assigned</option></select></label><button className="secondary-button" onClick={() => { setSearchQuery(""); setCategoryFilter(""); setAssignmentFilter(""); }}><FilterX size={15}/> Clear</button></div></div>
+      {loading ? <div className="management-state"><LoaderCircle className="state-spinner" size={22}/>Loading inquiriesâ€¦</div> : error && !declined.length ? <div className="management-state"><AlertCircle size={22}/><strong>Inquiry queue unavailable</strong><span>{error}</span><button className="secondary-button" onClick={() => void load()}>Try again</button></div> : !declined.length ? <div className="management-state"><UserRoundX size={23}/><strong>No unassigned inquiries</strong><span>New or declined inquiries without a handler will appear here.</span></div> : !filtered.length ? <div className="management-state"><Search size={23}/><strong>No matching inquiries</strong><span>Try changing your search or filters.</span></div> : <div className="table-scroll"><table><thead><tr><th>REFERENCE / CUSTOMER</th><th>CATEGORY</th><th>PREVIOUS HANDLER</th><th>DECLINE REASON</th><th>LAST ACTION</th><th>DETAILS</th></tr></thead><tbody>{filtered.map((item) => {
         return <tr key={item.id} className={focusInquiry === item.id ? "target-inquiry" : undefined}><td><strong>{inquiryReference(item.id)}</strong><br/>{item.customer_name}<br/><small>{item.subject}</small></td><td>{readableLabel(item.category)}</td><td>{item.previous_handler ?? "-"}</td><td className={item.handler_response_status === "DECLINED" ? "decline-reason-cell is-declined" : "decline-reason-cell"}>{item.handler_response_status === "DECLINED" ? <><strong>Handler declined</strong><span>{item.decline_reason || "No reason provided"}</span></> : <span>Not previously assigned</span>}</td><td>{displayDate(item.declined_at ?? item.created_at)}</td><td><button className="secondary-button details-button" onClick={() => void showDetails(item)} disabled={detailsLoading}>{detailsLoading ? "Loading..." : <><Eye size={14}/>Inquiry details</>}</button></td></tr>;
       })}</tbody></table></div>}
     </section>

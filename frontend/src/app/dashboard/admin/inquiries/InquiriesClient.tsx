@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, CircleHelp, Eye, FilterX, LoaderCircle, Search, X } from "lucide-react";
-import { useAdminLayout } from "../../../../components/AdminLayout";
 import { apiRequest, displayDate, INQUIRY_STATUSES, Inquiry, inquiryReference, readableLabel } from "../../../../lib/admin";
 import { useInquiryRefresh } from "../../../../lib/useInquiryRefresh";
 import InquiryEvidence from "../../../../components/InquiryEvidence";
@@ -21,11 +20,11 @@ function displayTimestamp(value?: string | null) {
 
 export default function AllInquiriesPage() {
   const router = useRouter();
-  const { search } = useAdminLayout();
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
   const [categories, setCategories] = useState<CategoryOption[]>([]);
   const [statusFilter, setStatusFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -57,12 +56,15 @@ export default function AllInquiriesPage() {
   useInquiryRefresh(loadInquiries);
 
   const filtered = useMemo(() => {
-    const query = search.trim().toLowerCase();
+    const query = searchQuery.trim().toLocaleLowerCase();
     return inquiries.filter((item) => {
-      const matchesQuery = !query || [item.customer_name, item.subject, inquiryReference(item.id), String(item.id)].some((value) => value.toLowerCase().includes(query));
-      return matchesQuery && (!statusFilter || item.status === statusFilter) && (!categoryFilter || item.category === categoryFilter);
+      const matchesSearch = !query || [
+        inquiryReference(item.id), item.customer_name, item.subject, item.category,
+        item.assigned_staff_name, item.status,
+      ].some((value) => value?.toLocaleLowerCase().includes(query));
+      return matchesSearch && (!statusFilter || item.status === statusFilter) && (!categoryFilter || item.category === categoryFilter);
     });
-  }, [inquiries, search, statusFilter, categoryFilter]);
+  }, [inquiries, searchQuery, statusFilter, categoryFilter]);
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount);
   const visible = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
@@ -80,14 +82,14 @@ export default function AllInquiriesPage() {
     finally { setDetailLoading(false); }
   }
 
-  function clearFilters() { setStatusFilter(""); setCategoryFilter(""); setPage(1); }
+  function clearFilters() { setSearchQuery(""); setStatusFilter(""); setCategoryFilter(""); setPage(1); }
 
   return <div className="page-content management-page">
-    <div className="management-heading"><div><p className="eyebrow"><span className="eyebrow-dot"/> INQUIRY WORKSPACE</p><h2>All inquiries</h2><p>Search and manage the inquiries available to your admin account.</p></div><span className="record-count">{loading ? "Loading…" : `${filtered.length} records`}</span></div>
+    <div className="management-heading"><div><p className="eyebrow"><span className="eyebrow-dot"/> INQUIRY WORKSPACE</p><h2>All inquiries</h2><p>Manage the inquiries available to your admin account.</p></div><span className="record-count">{loading ? "Loading…" : `${filtered.length} records`}</span></div>
     {error && <div className="feedback error-feedback" role="alert"><CircleHelp size={16}/>{error}<button aria-label="Dismiss error" onClick={() => setError("")}><X size={15}/></button></div>}
     <section className="management-card">
-      <div className="management-toolbar"><div className="local-search"><Search size={16}/><span>Search by reference, customer or subject using the header search</span></div><div className="filter-controls"><label><span>Status</span><select value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); setPage(1); }}><option value="">All statuses</option>{INQUIRY_STATUSES.map((status) => <option key={status} value={status}>{readableLabel(status)}</option>)}</select></label><label><span>Category</span><select value={categoryFilter} onChange={(event) => { setCategoryFilter(event.target.value); setPage(1); }}><option value="">All categories</option>{categories.map((category) => <option key={category.id} value={category.name}>{readableLabel(category.name)}{category.is_active ? "" : " (inactive)"}</option>)}</select></label><button className="secondary-button" onClick={clearFilters}><FilterX size={15}/> Clear</button></div></div>
-      {loading ? <div className="management-state"><LoaderCircle className="state-spinner" size={22}/><span>Loading inquiries…</span></div> : error && !inquiries.length ? <div className="management-state"><CircleHelp size={22}/><strong>Inquiries are unavailable</strong><button className="secondary-button" onClick={() => { setLoading(true); setError(""); void loadInquiries(); }}>Try again</button></div> : !filtered.length ? <div className="management-state"><Search size={23}/><strong>{search || statusFilter || categoryFilter ? "No matching inquiries" : "No inquiries yet"}</strong><span>Try changing your search or filters.</span></div> : <div className="table-scroll"><table><thead><tr><th>REFERENCE</th><th>CUSTOMER</th><th>SUBJECT</th><th>CATEGORY</th><th>ASSIGNED STAFF</th><th>STATUS</th><th>CREATED</th><th>ACTIONS</th></tr></thead><tbody>{visible.map((item) => <tr key={item.id}><td><span className="ref-cell">{inquiryReference(item.id)}</span></td><td><span className="customer-cell"><span className="customer-avatar">{item.customer_name.slice(0, 1).toUpperCase()}</span><strong>{item.customer_name}</strong></span></td><td className="subject-cell">{item.subject}</td><td><span className="category-chip">{readableLabel(item.category)}</span></td><td>{item.assigned_to ? item.assigned_staff_name ?? `Staff #${item.assigned_to}` : <span className="unassigned">Unassigned</span>}</td><td><span className={`status-pill status-${item.status.toLowerCase()}`}><span/>{readableLabel(item.status)}</span></td><td className="date-cell">{displayDate(item.created_at)}</td><td><div className="row-actions"><button className="secondary-button details-button" onClick={() => void viewDetails(item.id)} aria-label={`View all details for ${inquiryReference(item.id)}`}><Eye size={15}/> Details</button>{item.assigned_to == null && <button className="primary-button details-button" onClick={() => router.push(`/dashboard/admin/declined?inquiry=${item.id}`)}>Assign</button>}</div></td></tr>)}</tbody></table></div>}
+      <div className="management-toolbar"><div className="filter-controls"><label className="inquiry-search"><span>Search inquiries</span><span className="inquiry-search-input"><Search size={15}/><input type="search" value={searchQuery} onChange={(event) => { setSearchQuery(event.target.value); setPage(1); }} placeholder="Reference, customer, subject…" aria-label="Search inquiries"/></span></label><label><span>Status</span><select value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); setPage(1); }}><option value="">All statuses</option>{INQUIRY_STATUSES.map((status) => <option key={status} value={status}>{readableLabel(status)}</option>)}</select></label><label><span>Category</span><select value={categoryFilter} onChange={(event) => { setCategoryFilter(event.target.value); setPage(1); }}><option value="">All categories</option>{categories.map((category) => <option key={category.id} value={category.name}>{readableLabel(category.name)}{category.is_active ? "" : " (inactive)"}</option>)}</select></label><button className="secondary-button" onClick={clearFilters}><FilterX size={15}/> Clear</button></div></div>
+      {loading ? <div className="management-state"><LoaderCircle className="state-spinner" size={22}/><span>Loading inquiries…</span></div> : error && !inquiries.length ? <div className="management-state"><CircleHelp size={22}/><strong>Inquiries are unavailable</strong><button className="secondary-button" onClick={() => { setLoading(true); setError(""); void loadInquiries(); }}>Try again</button></div> : !filtered.length ? <div className="management-state"><Search size={23}/><strong>{statusFilter || categoryFilter ? "No matching inquiries" : "No inquiries yet"}</strong><span>Try changing your filters.</span></div> : <div className="table-scroll"><table><thead><tr><th>REFERENCE</th><th>CUSTOMER</th><th>SUBJECT</th><th>CATEGORY</th><th>ASSIGNED STAFF</th><th>STATUS</th><th>CREATED</th><th>ACTIONS</th></tr></thead><tbody>{visible.map((item) => <tr key={item.id}><td><span className="ref-cell">{inquiryReference(item.id)}</span></td><td><span className="customer-cell"><span className="customer-avatar">{item.customer_name.slice(0, 1).toUpperCase()}</span><strong>{item.customer_name}</strong></span></td><td className="subject-cell">{item.subject}</td><td><span className="category-chip">{readableLabel(item.category)}</span></td><td>{item.assigned_to ? item.assigned_staff_name ?? `Staff #${item.assigned_to}` : <span className="unassigned">Unassigned</span>}</td><td><span className={`status-pill status-${item.status.toLowerCase()}`}><span/>{readableLabel(item.status)}</span></td><td className="date-cell">{displayDate(item.created_at)}</td><td><div className="row-actions"><button className="secondary-button details-button" onClick={() => void viewDetails(item.id)} aria-label={`View all details for ${inquiryReference(item.id)}`}><Eye size={15}/> Details</button>{item.assigned_to == null && <button className="primary-button details-button" onClick={() => router.push(`/dashboard/admin/declined?inquiry=${item.id}`)}>Assign</button>}</div></td></tr>)}</tbody></table></div>}
       <div className="pagination"><span>Showing <strong>{filtered.length ? (currentPage - 1) * PAGE_SIZE + 1 : 0}–{Math.min(currentPage * PAGE_SIZE, filtered.length)}</strong> of <strong>{filtered.length}</strong></span><div><button className="secondary-button" aria-label="Previous page" disabled={currentPage <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}><ChevronLeft size={16}/> Previous</button><span>Page {currentPage} of {pageCount}</span><button className="secondary-button" aria-label="Next page" disabled={currentPage >= pageCount} onClick={() => setPage((value) => Math.min(pageCount, value + 1))}>Next <ChevronRight size={16}/></button></div></div>
     </section>
     {detailLoading && <div className="modal-backdrop"><section className="inquiry-modal management-state" role="status"><LoaderCircle className="state-spinner" size={22}/>Loading inquiry details…</section></div>}

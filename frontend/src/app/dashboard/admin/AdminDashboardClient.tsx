@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Activity, ArrowDownRight, ArrowUpRight, Bell, ChevronRight, CircleHelp, ClipboardList, Eye, MoreHorizontal, Search, ShieldCheck, UserRoundCog, X } from "lucide-react";
 import { useAdminLayout } from "../../../components/AdminLayout";
@@ -36,7 +36,7 @@ function formatDate(date: string) {
 }
 
 export default function AdminDashboard() {
-  const { user, search } = useAdminLayout();
+  const { user } = useAdminLayout();
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
   const [activeStaff, setActiveStaff] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
@@ -88,10 +88,7 @@ export default function AdminDashboard() {
     return () => { active = false; window.clearTimeout(clockTimer); };
   }, []);
 
-  const filteredInquiries = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    return (query ? inquiries.filter((item) => [item.id, item.customer_name, item.subject, item.category, item.status, item.assigned_to].some((value) => String(value ?? "").toLowerCase().includes(query))) : inquiries).slice(0, 8);
-  }, [inquiries, search]);
+  const filteredInquiries = inquiries.slice(0, 5);
   const counts = {
     total: inquiries.length,
     fresh: inquiries.filter((item) => item.status === "NEW").length,
@@ -124,7 +121,7 @@ export default function AdminDashboard() {
         <section className="team-strip" id="staff"><div className="team-icon"><UserRoundCog size={19}/></div><div className="team-copy"><strong>Active staff</strong><span>Enabled intake staff and handlers.</span></div><div className="team-count">{activeStaff ?? "—"} <small>active members</small></div></section>
 
         <section className="inquiries-panel" id="recent-inquiries"><div className="panel-head"><div><div className="panel-kicker">INBOX</div><h3>Recent inquiries <span className="result-count">{loading ? "" : inquiries.length}</span></h3><p>Keep track of the latest customer conversations.</p></div><Link className="view-all" href="/dashboard/admin/inquiries">View all inquiries <ChevronRight size={15}/></Link></div>
-          {error ? <div className="table-state"><span className="state-icon"><CircleHelp size={20}/></span><strong>We couldn’t load the dashboard</strong><p>{error}</p><button onClick={() => window.location.reload()}>Try again</button></div> : loading ? <div className="table-state"><span className="loading-ring"/><p>Loading your inquiry data...</p></div> : filteredInquiries.length === 0 ? <div className="table-state"><span className="state-icon"><Search size={20}/></span><strong>{search ? "No matching inquiries" : "No inquiries yet"}</strong><p>{search ? "Try a different search term." : "New customer requests will appear here."}</p></div> : <div className="table-scroll"><table><thead><tr><th>REFERENCE</th><th>CUSTOMER</th><th>SUBJECT</th><th>CATEGORY</th><th>ASSIGNED TO</th><th>STATUS</th><th>CREATED</th><th/></tr></thead><tbody>{filteredInquiries.map((inquiry) => <tr key={inquiry.id}><td><span className="ref-cell">CN-{String(inquiry.id).padStart(4, "0")}</span></td><td><span className="customer-cell"><span className="customer-avatar">{initials(inquiry.customer_name)}</span><strong>{inquiry.customer_name}</strong></span></td><td className="subject-cell">{inquiry.subject}</td><td><span className="category-chip">{inquiry.category.toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase())}</span></td><td>{inquiry.assigned_to ? <span className="assigned-cell"><span className="staff-avatar">{`S${inquiry.assigned_to}`.slice(0,2)}</span>{inquiry.assigned_staff_name ?? `Staff #${inquiry.assigned_to}`}</span> : <span className="unassigned">Unassigned</span>}</td><td><span className={`status-pill status-${inquiry.status.toLowerCase()}`}><span/>{inquiry.status.replace("_", " ").toLowerCase().replace(/^\w/, (letter) => letter.toUpperCase())}</span></td><td className="date-cell">{formatDate(inquiry.created_at)}</td><td><button className="row-action" onClick={() => void showInquiryDetails(inquiry)} aria-label={`View inquiry CN-${inquiry.id}`}><Eye size={16}/></button></td></tr>)}</tbody></table></div>}
+          {error ? <div className="table-state"><span className="state-icon"><CircleHelp size={20}/></span><strong>We couldn’t load the dashboard</strong><p>{error}</p><button onClick={() => window.location.reload()}>Try again</button></div> : loading ? <div className="table-state"><span className="loading-ring"/><p>Loading your inquiry data...</p></div> : filteredInquiries.length === 0 ? <div className="table-state"><span className="state-icon"><Search size={20}/></span><strong>No inquiries yet</strong><p>New customer requests will appear here.</p></div> : <div className="table-scroll"><table><thead><tr><th>REFERENCE</th><th>CUSTOMER</th><th>SUBJECT</th><th>CATEGORY</th><th>ASSIGNED TO</th><th>STATUS</th><th>CREATED</th><th/></tr></thead><tbody>{filteredInquiries.map((inquiry) => <tr key={inquiry.id}><td><span className="ref-cell">CN-{String(inquiry.id).padStart(4, "0")}</span></td><td><span className="customer-cell"><span className="customer-avatar">{initials(inquiry.customer_name)}</span><strong>{inquiry.customer_name}</strong></span></td><td className="subject-cell">{inquiry.subject}</td><td><span className="category-chip">{inquiry.category.toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase())}</span></td><td>{inquiry.assigned_to ? <span className="assigned-cell"><span className="staff-avatar">{`S${inquiry.assigned_to}`.slice(0,2)}</span>{inquiry.assigned_staff_name ?? `Staff #${inquiry.assigned_to}`}</span> : <span className="unassigned">Unassigned</span>}</td><td><span className={`status-pill status-${inquiry.status.toLowerCase()}`}><span/>{inquiry.status.replace("_", " ").toLowerCase().replace(/^\w/, (letter) => letter.toUpperCase())}</span></td><td className="date-cell">{formatDate(inquiry.created_at)}</td><td><button className="row-action" onClick={() => void showInquiryDetails(inquiry)} aria-label={`View inquiry CN-${inquiry.id}`}><Eye size={16}/></button></td></tr>)}</tbody></table></div>}
           <div className="panel-footer"><span>Showing <strong>{filteredInquiries.length}</strong> of <strong>{inquiries.length}</strong> inquiries</span><button aria-label="More inquiry options"><MoreHorizontal size={19}/></button></div>
         </section>
         <footer className="page-footer"><span>© {now?.getFullYear() ?? ""} Customer Inquiry System</span><span>Here to help, every step of the way.</span></footer>

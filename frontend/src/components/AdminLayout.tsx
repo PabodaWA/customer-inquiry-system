@@ -13,7 +13,7 @@ import ThemeToggle from "./ThemeToggle";
 import { logoutSession } from "../lib/logout";
 
 type AdminUser = { id?: number; fullName: string; email: string; role: "ADMIN" };
-type AdminLayoutContextValue = { user: AdminUser; search: string; setSearch: (value: string) => void };
+type AdminLayoutContextValue = { user: AdminUser };
 
 const AdminLayoutContext = createContext<AdminLayoutContextValue | null>(null);
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
@@ -58,7 +58,6 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const sidebarRef = useRef<HTMLElement>(null);
   const [user, setUser] = useState<AdminUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [search, setSearch] = useState("");
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -109,7 +108,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [mobileOpen]);
 
-  const contextValue = useMemo(() => user ? { user, search, setSearch } : null, [user, search]);
+  const contextValue = useMemo(() => user ? { user } : null, [user]);
 
   async function logout() {
     setLogoutError("");
@@ -159,7 +158,6 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             <button ref={mobileToggleRef} className="icon-button mobile-menu" onClick={() => setMobileOpen(true)} aria-label="Open navigation" aria-expanded={mobileOpen} aria-controls="admin-sidebar"><PanelLeftOpen size={20}/></button>
             <div className="header-title"><div className="breadcrumbs"><span>Workspace</span><ChevronRight size={14}/><strong>{title}</strong></div><h1>{title}</h1></div>
             <div className="topbar-actions">
-              <label className="search-box"><span className="sr-only">Search inquiries</span><input aria-label="Search inquiries" placeholder="Search inquiries..." value={search} onChange={(event) => setSearch(event.target.value)}/><kbd>/</kbd></label>
               <ThemeToggle className="icon-button theme-button" />
               <div className="profile-wrap">
                 <button className="profile-button" onClick={() => setProfileOpen((value) => !value)} aria-expanded={profileOpen} aria-haspopup="menu"><span className="avatar">{nameInitials(user.fullName)}</span><span className="profile-text"><strong>{user.fullName}</strong><small>Administrator</small></span><ChevronDown size={15}/></button>
