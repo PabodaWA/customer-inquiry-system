@@ -3,11 +3,13 @@ const path = require("node:path");
 const pool = require("../src/config/database");
 
 async function migrate() {
-  const migrationPath = path.join(__dirname, "../src/db/migrations/001_inquiry_categories.sql");
-  const sql = fs.readFileSync(migrationPath, "utf8");
   try {
-    await pool.query(sql);
-    console.log("Database migration 001_inquiry_categories applied.");
+    const directory = path.join(__dirname, "../src/db/migrations");
+    const files = fs.readdirSync(directory).filter((file) => file.endsWith(".sql")).sort();
+    for (const file of files) {
+      await pool.query(fs.readFileSync(path.join(directory, file), "utf8"));
+      console.log(`Database migration ${file} applied.`);
+    }
   } finally {
     await pool.end();
   }

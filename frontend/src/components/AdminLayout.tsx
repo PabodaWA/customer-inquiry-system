@@ -5,11 +5,12 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  ChevronDown, ChevronRight, ClipboardList, Coffee, LayoutDashboard, LogOut,
-  PanelLeftClose, PanelLeftOpen, Settings, ShieldCheck, Tags, UserRoundCheck,
-  Users, X, CircleHelp,
+  Bell, ChevronDown, ChevronRight, ClipboardList, Coffee, LayoutDashboard, LogOut,
+  PanelLeftClose, PanelLeftOpen, Settings, ShieldCheck, Tags,
+  Users, X, UserRoundX,
 } from "lucide-react";
 import ThemeToggle from "./ThemeToggle";
+import { logoutSession } from "../lib/logout";
 
 type AdminUser = { id?: number; fullName: string; email: string; role: "ADMIN" };
 type AdminLayoutContextValue = { user: AdminUser; search: string; setSearch: (value: string) => void };
@@ -20,18 +21,20 @@ const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
 const navigation = [
   { label: "Dashboard", href: "/dashboard/admin", icon: LayoutDashboard },
   { label: "All inquiries", href: "/dashboard/admin/inquiries", icon: ClipboardList },
+  { label: "Declined inquiries", href: "/dashboard/admin/declined", icon: UserRoundX },
   { label: "Staff management", href: "/dashboard/admin/staff", icon: Users },
   { label: "Category management", href: "/dashboard/admin/categories", icon: Tags },
-  { label: "Assignments", href: "/dashboard/admin/assignments", icon: UserRoundCheck },
+  { label: "Notifications", href: "/dashboard/admin/notifications", icon: Bell },
 ];
 
 function getPageTitle(pathname: string) {
   const pages: Record<string, string> = {
     "/dashboard/admin": "Dashboard",
     "/dashboard/admin/inquiries": "All inquiries",
+    "/dashboard/admin/notifications": "Notifications",
     "/dashboard/admin/staff": "Staff management",
     "/dashboard/admin/categories": "Category management",
-    "/dashboard/admin/assignments": "Assignments",
+    "/dashboard/admin/declined": "Declined inquiries",
     "/dashboard/admin/settings": "Settings",
   };
   return pages[pathname] ?? "Dashboard";
@@ -59,6 +62,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [logoutError, setLogoutError] = useState("");
+  const [loggingOut, setLoggingOut] = useState(false);
   const title = getPageTitle(pathname);
 
   useEffect(() => {
@@ -107,8 +112,11 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const contextValue = useMemo(() => user ? { user, search, setSearch } : null, [user, search]);
 
   async function logout() {
-    try { await fetch(`${apiUrl}/api/auth/logout`, { method: "POST", credentials: "include" }); }
-    finally { router.replace("/"); }
+    setLogoutError("");
+    setLoggingOut(true);
+    try { await logoutSession(); router.replace("/"); }
+    catch { setLogoutError("Could not log out because the service is unavailable. Please try again."); }
+    finally { setLoggingOut(false); }
   }
 
   function closeMobileNav() {
@@ -127,7 +135,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         <aside id="admin-sidebar" ref={sidebarRef} className={`sidebar${mobileOpen ? " sidebar-open" : ""}`} aria-label="Admin sidebar" role={mobileOpen ? "dialog" : undefined} aria-modal={mobileOpen || undefined}>
           <div className="brand-row">
             <Link className="brand-icon" href="/dashboard/admin" aria-label="Coffee Ninja dashboard"><Coffee size={21} strokeWidth={2.4} /></Link>
-            <span className="brand-copy"><strong>Coffee Ninja</strong><small>INQUIRY PORTAL</small></span>
+            <span className="brand-copy"><small>INQUIRY PORTAL</small></span>
             <button className="icon-button mobile-close" onClick={closeMobileNav} aria-label="Close navigation"><X size={18}/></button>
           </div>
           <div className="workspace-label">WORKSPACE</div>
@@ -140,8 +148,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           <div className="side-divider"/>
           <Link className={`side-link${pathname === "/dashboard/admin/settings" ? " selected" : ""}`} href="/dashboard/admin/settings" onClick={() => { if (mobileOpen) closeMobileNav(); }}><Settings size={18}/><span>Settings</span></Link>
           <div className="sidebar-bottom">
-            <div className="help-card"><span className="help-icon"><CircleHelp size={17}/></span><strong>Need a hand?</strong><p>Visit the help center for tips and answers.</p><a href="mailto:support@coffeeninja.com">Get support <ChevronRight size={14}/></a></div>
-            <button className="logout-link" onClick={logout}><LogOut size={18}/><span>Log out</span></button>
+            <button className="logout-link" onClick={() => void logout()} disabled={loggingOut}><LogOut size={18}/><span>{loggingOut ? "Logging out…" : "Log out"}</span></button>
             <div className="sidebar-foot"><ShieldCheck size={14}/> <span>Secure workspace</span></div>
           </div>
         </aside>
@@ -160,7 +167,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
               </div>
             </div>
           </header>
-          <main className="admin-content">{children}</main>
+          <main className="admin-content">{logoutError && <div className="feedback error-feedback" role="alert">{logoutError}<button onClick={() => void logout()} disabled={loggingOut}>Retry</button></div>}{children}</main>
         </section>
       </div>
     </AdminLayoutContext.Provider>

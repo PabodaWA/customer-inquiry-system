@@ -3,6 +3,7 @@ export type InquiryStatus = "NEW" | "IN_PROGRESS" | "RESOLVED";
 export type Inquiry = {
   id: number;
   customer_name: string;
+  customer_email?: string | null;
   contact?: string;
   subject: string;
   description?: string;
@@ -10,10 +11,15 @@ export type Inquiry = {
   status: InquiryStatus;
   assigned_to?: number | null;
   assigned_staff_name?: string | null;
+  assignment_status?: "PENDING" | "ASSIGNED";
+  handler_response_status?: "WAITING" | "ACCEPTED" | "DECLINED" | "NOT_REQUIRED" | "UNKNOWN";
   created_at: string;
   updated_at?: string;
   created_by?: number;
+  evidence_files?: InquiryEvidence[];
 };
+
+export type InquiryEvidence = { id: number; file_name: string; mime_type: string; data_url: string };
 
 export type ApiResult<T> = { success?: boolean; data?: T; count?: number; message?: string };
 
@@ -42,7 +48,8 @@ export function inquiryReference(id: number) {
   return `CN-${String(id).padStart(4, "0")}`;
 }
 
-export function readableLabel(value: string) {
+export function readableLabel(value?: string | null) {
+  if (!value) return "Unknown";
   return value.toLowerCase().replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 

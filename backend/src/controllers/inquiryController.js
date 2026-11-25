@@ -1,5 +1,7 @@
-
+﻿
 const pool = require("../config/database");
+const { assignInquiryAutomatically } = require("../services/assignmentService");
+const { getInquiryScope, canAccessInquiry } = require("../services/inquiryAccess");
 
 // ==========================================
 // CONSTANTS
@@ -10,6 +12,11 @@ const VALID_STATUSES = [
   "IN_PROGRESS",
   "RESOLVED"
 ];
+const ALLOWED_EVIDENCE_TYPES = new Set([
+  "image/jpeg", "image/png", "image/webp", "application/pdf", "text/plain",
+  "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+]);
+const MAX_EVIDENCE_SIZE = 5 * 1024 * 1024;
 
 // ==========================================
 // HELPER FUNCTIONS
@@ -26,23 +33,23 @@ const isValidId = (id) => {
   return /^[1-9]\d*$/.test(String(id));
 };
 
-
-// Check inquiry access permissions
-const canAccessInquiry = (user, inquiry) => {
-
-  if (user.role === "ADMIN") {
-    return true;
+const normalizeContact = (contact) => {
+  const trimmedContact = contact.trim();
+  if (trimmedContact.includes("@")) {
+    const email = trimmedContact.toLowerCase();
+    return {
+      type: "email",
+      value: email,
+      valid: email.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email),
+    };
   }
 
-  if (user.role === "INTAKE") {
-    return Number(inquiry.created_by) === Number(user.id);
-  }
-
-  if (user.role === "HANDLER") {
-    return Number(inquiry.assigned_to) === Number(user.id);
-  }
-
-  return false;
+  const digits = trimmedContact.replace(/\D/g, "");
+  return {
+    type: "phone",
+    value: digits,
+    valid: /^\+?[\d\s().-]{7,24}$/.test(trimmedContact) && digits.length >= 7 && digits.length <= 15,
+  };
 };
 
 
@@ -61,22 +68,51 @@ const createInquiry = async (req, res) => {
     });
   }
 
-  // Only ADMIN and INTAKE can create inquiries
-  if (!["ADMIN", "INTAKE"].includes(user.role)) {
+  // Inquiry registration belongs to intake staff.
+  if (user.role !== "INTAKE") {
     return res.status(403).json({
       success: false,
       message: "You are not allowed to create inquiries."
     });
   }
 
+  if (Object.prototype.hasOwnProperty.call(req.body ?? {}, "assigned_to")) {
+    return res.status(400).json({ success: false, message: "Handler assignment is managed automatically and cannot be provided." });
+  }
+
+  const body = req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
   const {
     customer_name,
     contact,
+    customer_email = "",
     subject,
     description,
-    category = "GENERAL"
-  } = req.body;
+    category,
+    evidence_files = []
+  } = body;
   const categoryName = typeof category === "string" ? category.trim().toUpperCase().replace(/\s+/g, "_") : "";
+  const normalizedContact = typeof contact === "string" ? normalizeContact(contact) : null;
+  const cleanEmail = typeof customer_email === "string" ? customer_email.trim() : null;
+  if (cleanEmail === null || cleanEmail.length > 254 || (cleanEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(cleanEmail))) {
+    return res.status(400).json({ success: false, message: "Enter a valid customer email address." });
+  }
+  if (!Array.isArray(evidence_files) || evidence_files.length > 6) {
+    return res.status(400).json({ success: false, message: "Attach up to 3 pictures and 3 documents." });
+  }
+  const filesToSave = [];
+  let pictureCount = 0;
+  let documentCount = 0;
+  for (const file of evidence_files) {
+    if (!file || typeof file.name !== "string" || !file.name.trim() || file.name.trim().length > 255 || typeof file.type !== "string" || !ALLOWED_EVIDENCE_TYPES.has(file.type) || typeof file.data !== "string" || file.data.length > Math.ceil(MAX_EVIDENCE_SIZE / 3) * 4 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(file.data)) {
+      return res.status(400).json({ success: false, message: "Evidence files must be supported images or documents." });
+    }
+    if (file.type.startsWith("image/")) pictureCount += 1;
+    else documentCount += 1;
+    if (pictureCount > 3 || documentCount > 3) return res.status(400).json({ success: false, message: "Attach up to 3 pictures and 3 documents." });
+    const buffer = Buffer.from(file.data, "base64");
+    if (!buffer.length || buffer.length > MAX_EVIDENCE_SIZE) return res.status(400).json({ success: false, message: "Each evidence file must be 5 MB or smaller." });
+    filesToSave.push({ name: file.name.trim(), type: file.type, buffer });
+  }
 
   // Validate required fields
   if (
@@ -95,7 +131,20 @@ const createInquiry = async (req, res) => {
     });
   }
 
-  if (!categoryName) {
+  if (
+    customer_name.trim().length < 2 ||
+    customer_name.trim().length > 120 ||
+    /[\u0000-\u001f\u007f]/.test(customer_name) ||
+    subject.trim().length < 3 ||
+    subject.trim().length > 160 ||
+    description.trim().length < 10 ||
+    description.trim().length > 5000 ||
+    !normalizedContact.valid
+  ) {
+    return res.status(400).json({ success: false, message: "Enter a name of 2–120 characters, a valid contact, a subject of 3–160 characters, and a description of 10–5,000 characters." });
+  }
+
+  if (!categoryName || categoryName.length > 40) {
     return res.status(400).json({
       success: false,
       message: "Invalid inquiry category."
@@ -119,30 +168,71 @@ const createInquiry = async (req, res) => {
       return res.status(400).json({ success: false, message: "Select an active inquiry category." });
     }
 
-    // Insert inquiry
+    const cleanSubject = subject.trim();
+    const cleanDescription = description.trim();
+    const cleanCustomerName = customer_name.trim();
+    const normalizedCustomerName = cleanCustomerName.toLowerCase();
+    const duplicateLockKey = JSON.stringify([normalizedCustomerName, normalizedContact.value, cleanSubject, cleanDescription]);
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [duplicateLockKey]);
+
+    const contactComparison = normalizedContact.type === "email"
+      ? "LOWER(BTRIM(contact)) = $2"
+      : "REGEXP_REPLACE(contact, '[^0-9]', '', 'g') = $2";
+    const duplicateResult = await client.query(
+      `SELECT id
+       FROM inquiries
+       WHERE LOWER(BTRIM(customer_name)) = $1
+         AND ${contactComparison}
+         AND subject = $3
+         AND description = $4
+         AND status IN ('NEW', 'IN_PROGRESS')
+       LIMIT 1`,
+      [normalizedCustomerName, normalizedContact.value, cleanSubject, cleanDescription]
+    );
+    if (duplicateResult.rows.length) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({
+        success: false,
+        message: "This inquiry already exists and is currently being handled. You can submit the same inquiry again once the existing inquiry has been resolved.",
+      });
+    }
+
+    // Insert unassigned first. The assignment service runs in this transaction.
     const result = await client.query(
       `INSERT INTO inquiries
        (
          customer_name,
+         customer_email,
          contact,
          subject,
          description,
          category,
-         created_by
+         created_by,
+         status,
+         assignment_status,
+         handler_response_status
        )
-       VALUES ($1, $2, $3, $4, $5, $6)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'NEW', 'PENDING', 'NOT_REQUIRED')
        RETURNING *`,
       [
-        customer_name.trim(),
+        cleanCustomerName,
+        cleanEmail.toLowerCase() || null,
         contact.trim(),
-        subject.trim(),
-        description.trim(),
+        cleanSubject,
+        cleanDescription,
         categoryName,
         user.id
       ]
     );
 
-    const inquiry = result.rows[0];
+    let inquiry = result.rows[0];
+
+    for (const file of filesToSave) {
+      await client.query(
+        "INSERT INTO inquiry_evidence (inquiry_id, file_name, mime_type, file_data) VALUES ($1, $2, $3, $4)",
+        [inquiry.id, file.name, file.type, file.buffer]
+      );
+    }
 
     // Save inquiry creation history
     await client.query(
@@ -164,18 +254,65 @@ const createInquiry = async (req, res) => {
       ]
     );
 
+    const assignment = await assignInquiryAutomatically(client, categoryName);
+    if (assignment.handler) {
+      const assignedResult = await client.query(
+        `UPDATE inquiries
+         SET assigned_to = $1,
+             assignment_status = 'ASSIGNED',
+             handler_response_status = 'WAITING',
+             status = 'NEW',
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $2
+         RETURNING *`,
+        [assignment.handler.id, inquiry.id]
+      );
+      inquiry = assignedResult.rows[0];
+
+      await client.query(
+        `INSERT INTO inquiry_history (inquiry_id, changed_by, action, old_value, new_value)
+         VALUES ($1, $2, 'ASSIGNED', NULL, $3)`,
+        [inquiry.id, user.id, String(assignment.handler.id)]
+      );
+      await client.query(
+        `INSERT INTO inquiry_assignments (inquiry_id, handler_id, assigned_by, status)
+         VALUES ($1, $2, $3, 'PENDING_ACCEPTANCE')`,
+        [inquiry.id, assignment.handler.id, user.id]
+      );
+      await client.query(
+        `INSERT INTO user_notifications (user_id, inquiry_id, kind, message)
+         VALUES ($1, $2, 'NEW_ASSIGNMENT', $3)`,
+        [assignment.handler.id, inquiry.id, `Inquiry CN-${String(inquiry.id).padStart(4, "0")} has been assigned to you.`]
+      );
+    }
+
+    const detailedResult = await client.query(
+      `SELECT i.*, assigned.full_name AS assigned_staff_name
+       FROM inquiries i
+       LEFT JOIN users assigned ON assigned.id = i.assigned_to
+       WHERE i.id = $1`,
+      [inquiry.id]
+    );
+    inquiry = detailedResult.rows[0];
+
     await client.query("COMMIT");
 
     return res.status(201).json({
       success: true,
-      message: "Inquiry created successfully.",
-      data: inquiry
+      message: assignment.handler
+        ? `Inquiry created successfully and assigned to ${assignment.handler.full_name}.`
+        : "Inquiry created successfully. No eligible handler is currently available; assignment is pending.",
+      data: inquiry,
+      assignment: {
+        status: inquiry.assignment_status,
+        handler: assignment.handler ? { id: assignment.handler.id, full_name: assignment.handler.full_name } : null,
+      },
     });
 
   } catch (error) {
 
     if (client) {
-      await client.query("ROLLBACK");
+      try { await client.query("ROLLBACK"); } catch { /* Preserve the original transaction error. */ }
     }
 
     console.error("Create Inquiry Error:", error);
@@ -203,127 +340,88 @@ const getAllInquiries = async (req, res) => {
   try {
 
     const user = getCurrentUser(req);
+    const { search, status, category, assigned_to, assignment, date_from, date_to, page, pageSize } = req.query;
+    if ([search, status, category, assigned_to, assignment, date_from, date_to, page, pageSize].some((value) => value !== undefined && typeof value !== "string")) {
+      return res.status(400).json({ success: false, message: "Invalid inquiry filters." });
+    }
+    const normalizedStatus = status ? String(status).toUpperCase() : "";
+    const normalizedCategory = category ? String(category).trim().toUpperCase() : "";
+    const normalizedAssignment = assignment ? String(assignment).toUpperCase() : "ALL";
+    if (search && search.length > 200) return res.status(400).json({ success: false, message: "Search text must be 200 characters or fewer." });
+    if (normalizedCategory.length > 40) return res.status(400).json({ success: false, message: "Invalid inquiry category." });
+    if (normalizedStatus && !VALID_STATUSES.includes(normalizedStatus)) return res.status(400).json({ success: false, message: "Invalid inquiry status." });
+    if (normalizedAssignment && !["ALL", "ASSIGNED", "UNASSIGNED"].includes(normalizedAssignment)) return res.status(400).json({ success: false, message: "Invalid assignment filter." });
+    if (assigned_to && !isValidId(assigned_to)) return res.status(400).json({ success: false, message: "Invalid staff ID." });
+    const validDate = (value) => {
+      if (!value) return true;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+      const parsed = new Date(`${value}T00:00:00Z`);
+      return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+    };
+    if (!validDate(date_from) || !validDate(date_to) || (date_from && date_to && date_from > date_to)) return res.status(400).json({ success: false, message: "Invalid inquiry date range." });
 
-    const {
-      search,
-      status,
-      category,
-      assigned_to
-    } = req.query;
+    const paginated = page !== undefined || pageSize !== undefined;
+    const pageNumber = page === undefined ? 1 : Number(page);
+    const limit = pageSize === undefined ? 10 : Number(pageSize);
+    if (paginated && (!Number.isInteger(pageNumber) || pageNumber < 1 || pageNumber > 100000 || ![10, 25, 50].includes(limit))) return res.status(400).json({ success: false, message: "Page must be between 1 and 100000 and pageSize must be 10, 25, or 50." });
 
-    let query = `
-      SELECT i.*, assigned.full_name AS assigned_staff_name
-      FROM inquiries i
-      LEFT JOIN users assigned ON assigned.id = i.assigned_to
-      WHERE 1 = 1
-    `;
-
-    const values = [];
-
-    // Apply role-based access
-    if (user.role === "INTAKE") {
-
-      values.push(user.id);
-
-      query += `
-        AND created_by = $${values.length}
-      `;
-
-    } else if (user.role === "HANDLER") {
-
-      values.push(user.id);
-
-      query += `
-        AND assigned_to = $${values.length}
-      `;
-
+    if (normalizedCategory) {
+      const categoryResult = await pool.query("SELECT 1 FROM inquiry_categories WHERE name = $1", [normalizedCategory]);
+      if (!categoryResult.rows.length) return res.status(400).json({ success: false, message: "Invalid inquiry category." });
     }
 
-    // Search by customer name, contact or subject
+    const inquiryScope = getInquiryScope(user);
+    if (!inquiryScope) return res.status(403).json({ success: false, message: "You cannot access inquiries." });
+    const scopeSql = inquiryScope.clause ? ` AND ${inquiryScope.clause}` : "";
+    const clauses = inquiryScope.clause ? [inquiryScope.clause] : [];
+    const values = [...inquiryScope.values];
+    const addClause = (sql, value) => { values.push(value); clauses.push(sql.replace("?", `$${values.length}`)); };
+
     if (search?.trim()) {
-
-      values.push(`%${search.trim()}%`);
-
-      query += `
-        AND (
-          i.customer_name ILIKE $${values.length}
-          OR i.contact ILIKE $${values.length}
-          OR i.subject ILIKE $${values.length}
-          OR i.id::text ILIKE $${values.length}
-        )
-      `;
-
+      const term = `%${String(search).trim()}%`;
+      values.push(term);
+      const p = `$${values.length}`;
+      clauses.push(`(i.customer_name ILIKE ${p} OR i.contact ILIKE ${p} OR i.subject ILIKE ${p} OR assigned.full_name ILIKE ${p} OR i.id::text ILIKE ${p} OR ('CN-' || LPAD(i.id::text, 4, '0')) ILIKE ${p})`);
     }
-
-    // Filter by status
-    if (status) {
-
-      if (!VALID_STATUSES.includes(status)) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid inquiry status."
-        });
-      }
-
-      values.push(status);
-
-      query += `
-        AND i.status = $${values.length}
-      `;
-
+    if (normalizedStatus) addClause("i.status = ?", normalizedStatus);
+    if (normalizedCategory) addClause("i.category = ?", normalizedCategory);
+    if (assigned_to) addClause("i.assigned_to = ?", assigned_to);
+    if (normalizedAssignment === "ASSIGNED") clauses.push("i.assigned_to IS NOT NULL");
+    if (normalizedAssignment === "UNASSIGNED") clauses.push("i.assigned_to IS NULL");
+    if (date_from) addClause("i.created_at >= ?::date", date_from);
+    if (date_to) addClause("i.created_at < (?::date + INTERVAL '1 day')", date_to);
+    const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+    const countResult = await pool.query(
+      `SELECT COUNT(*)::int AS count FROM inquiries i LEFT JOIN users assigned ON assigned.id = i.assigned_to ${where}`,
+      values
+    );
+    const count = countResult.rows[0].count;
+    const listValues = [...values];
+    let paginationSql = "";
+    if (paginated) {
+      listValues.push(limit, (pageNumber - 1) * limit);
+      paginationSql = `LIMIT $${listValues.length - 1} OFFSET $${listValues.length}`;
     }
-
-    // Filter by category
-    if (category) {
-
-      const categoryResult = await pool.query(
-        "SELECT id FROM inquiry_categories WHERE name = $1",
-        [String(category).trim().toUpperCase()]
-      );
-      if (!categoryResult.rows.length) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid inquiry category."
-        });
-      }
-
-      values.push(String(category).trim().toUpperCase());
-
-      query += `
-        AND i.category = $${values.length}
-      `;
-
-    }
-
-    // Filter by assigned staff
-    if (assigned_to) {
-
-      if (!isValidId(assigned_to)) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid staff ID."
-        });
-      }
-
-      values.push(assigned_to);
-
-      query += `
-        AND i.assigned_to = $${values.length}
-      `;
-
-    }
-
-    // Latest inquiries first
-    query += `
-      ORDER BY i.created_at DESC
-    `;
-
-    const result = await pool.query(query, values);
-
+    const result = await pool.query(
+      `SELECT i.*, assigned.full_name AS assigned_staff_name
+       FROM inquiries i LEFT JOIN users assigned ON assigned.id = i.assigned_to
+       ${where} ORDER BY i.created_at DESC, i.id DESC ${paginationSql}`,
+      listValues
+    );
+    const statsResult = await pool.query(
+      `SELECT COUNT(*)::int AS total,
+              COUNT(*) FILTER (WHERE i.status = 'NEW')::int AS new_count,
+              COUNT(*) FILTER (WHERE i.status = 'IN_PROGRESS')::int AS in_progress,
+              COUNT(*) FILTER (WHERE i.status = 'RESOLVED')::int AS resolved
+       FROM inquiries i WHERE TRUE ${scopeSql}`,
+      inquiryScope.values
+    );
     return res.status(200).json({
       success: true,
-      count: result.rows.length,
-      data: result.rows
+      count,
+      data: result.rows,
+      stats: statsResult.rows[0],
+      ...(paginated ? { pagination: { page: pageNumber, pageSize: limit, total: count, totalPages: Math.ceil(count / limit) } } : {})
     });
 
   } catch (error) {
@@ -337,6 +435,16 @@ const getAllInquiries = async (req, res) => {
 
   }
 
+};
+
+const getInquiryCategories = async (_req, res) => {
+  try {
+    const result = await pool.query("SELECT name, is_active FROM inquiry_categories ORDER BY name");
+    return res.status(200).json({ success: true, count: result.rows.length, data: result.rows });
+  } catch (error) {
+    console.error("Get Inquiry Categories Error:", error);
+    return res.status(500).json({ success: false, message: "Failed to retrieve inquiry categories." });
+  }
 };
 
 
@@ -362,9 +470,10 @@ const getInquiryById = async (req, res) => {
 
     // Find inquiry
     const result = await pool.query(
-      `SELECT i.*, assigned.full_name AS assigned_staff_name
+      `SELECT i.*, assigned.full_name AS assigned_staff_name, creator.full_name AS created_by_name
        FROM inquiries i
        LEFT JOIN users assigned ON assigned.id = i.assigned_to
+       LEFT JOIN users creator ON creator.id = i.created_by
        WHERE i.id = $1`,
       [id]
     );
@@ -385,6 +494,18 @@ const getInquiryById = async (req, res) => {
         message: "You are not allowed to view this inquiry."
       });
     }
+
+    const evidenceResult = await pool.query(
+      `SELECT id, file_name, mime_type, file_data
+       FROM inquiry_evidence WHERE inquiry_id = $1 ORDER BY id`,
+      [id]
+    );
+    inquiry.evidence_files = evidenceResult.rows.map((file) => ({
+      id: file.id,
+      file_name: file.file_name,
+      mime_type: file.mime_type,
+      data_url: `data:${file.mime_type};base64,${file.file_data.toString("base64")}`,
+    }));
 
     return res.status(200).json({
       success: true,
@@ -417,12 +538,20 @@ const updateInquiryStatus = async (req, res) => {
 
   const { status } = req.body;
 
-  // Only ADMIN and HANDLER can update status
-  if (!["ADMIN", "HANDLER"].includes(user.role)) {
+  // Admins review status but do not change it; status changes happen through handler workflow actions.
+  if (user.role === "ADMIN") {
+    return res.status(403).json({ success: false, message: "Admins can view inquiry status but cannot change it." });
+  }
+
+  if (user.role !== "HANDLER") {
     return res.status(403).json({
       success: false,
       message: "You cannot update inquiry status."
     });
+  }
+
+  if (user.role === "HANDLER") {
+    return res.status(403).json({ success: false, message: "Use the handler workflow actions to update this inquiry." });
   }
 
   if (!isValidId(id)) {
@@ -580,172 +709,15 @@ const updateInquiryStatus = async (req, res) => {
 // ==========================================
 
 const assignInquiry = async (req, res) => {
-
   const user = getCurrentUser(req);
-
-  const { id } = req.params;
-
-  const { assigned_to } = req.body;
-
-  // Only ADMIN and INTAKE can assign inquiries
-  if (!["ADMIN", "INTAKE"].includes(user.role)) {
-    return res.status(403).json({
-      success: false,
-      message: "You are not allowed to assign inquiries."
-    });
+  if (user.role !== "ADMIN") {
+    return res.status(403).json({ success: false, message: "You are not allowed to assign inquiries." });
   }
-
-  if (
-    !isValidId(id) ||
-    !isValidId(assigned_to)
-  ) {
-    return res.status(400).json({
-      success: false,
-      message: "Valid inquiry ID and staff ID are required."
-    });
-  }
-
-  let client;
-
-  try {
-
-    client = await pool.connect();
-
-    await client.query("BEGIN");
-
-    // Find and lock inquiry
-    const inquiryResult = await client.query(
-      `SELECT *
-       FROM inquiries
-       WHERE id = $1
-       FOR UPDATE`,
-      [id]
-    );
-
-    if (inquiryResult.rows.length === 0) {
-
-      await client.query("ROLLBACK");
-
-      return res.status(404).json({
-        success: false,
-        message: "Inquiry not found."
-      });
-
-    }
-
-    const inquiry = inquiryResult.rows[0];
-
-    // Check permission
-    if (!canAccessInquiry(user, inquiry)) {
-
-      await client.query("ROLLBACK");
-
-      return res.status(403).json({
-        success: false,
-        message: "You cannot assign this inquiry."
-      });
-
-    }
-
-    // Check whether selected staff is an active HANDLER
-    const staffResult = await client.query(
-      `SELECT id
-       FROM users
-       WHERE id = $1
-       AND role = 'HANDLER'
-       AND is_active = TRUE`,
-      [assigned_to]
-    );
-
-    if (staffResult.rows.length === 0) {
-
-      await client.query("ROLLBACK");
-
-      return res.status(404).json({
-        success: false,
-        message: "Active handler not found."
-      });
-
-    }
-
-    const oldStaff = inquiry.assigned_to;
-
-    // Check existing assignment
-    if (Number(oldStaff) === Number(assigned_to)) {
-
-      await client.query("ROLLBACK");
-
-      return res.status(200).json({
-        success: true,
-        message: "This staff member is already assigned.",
-        data: inquiry
-      });
-
-    }
-
-    // Update assignment
-    const updated = await client.query(
-      `UPDATE inquiries
-       SET assigned_to = $1,
-           updated_at = CURRENT_TIMESTAMP
-       WHERE id = $2
-       RETURNING *`,
-      [assigned_to, id]
-    );
-
-    // Record assignment history
-    await client.query(
-      `INSERT INTO inquiry_history
-       (
-         inquiry_id,
-         changed_by,
-         action,
-         old_value,
-         new_value
-       )
-       VALUES ($1, $2, $3, $4, $5)`,
-      [
-        id,
-        user.id,
-        "ASSIGNED",
-        oldStaff === null ? null : String(oldStaff),
-        String(assigned_to)
-      ]
-    );
-
-    await client.query("COMMIT");
-
-    return res.status(200).json({
-      success: true,
-      message: "Inquiry assigned successfully.",
-      data: updated.rows[0]
-    });
-
-  } catch (error) {
-
-    if (client) {
-      await client.query("ROLLBACK");
-    }
-
-    console.error("Assign Inquiry Error:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Failed to assign inquiry."
-    });
-
-  } finally {
-
-    client?.release();
-
-  }
-
+  return res.status(403).json({
+    success: false,
+    message: "Only declined inquiries can be reassigned through the Declined inquiries queue."
+  });
 };
-
-
-// ==========================================
-// 7. VIEW INQUIRY HISTORY
-// ==========================================
 
 const getInquiryHistory = async (req, res) => {
 
@@ -820,6 +792,38 @@ const getInquiryHistory = async (req, res) => {
 };
 
 
+const getRecentInquiryActivity = async (req, res) => {
+  const user = getCurrentUser(req);
+  const inquiryScope = getInquiryScope(user);
+  if (!inquiryScope) return res.status(403).json({ success: false, message: "You cannot access inquiry activity." });
+  const rawLimit = req.query.limit === undefined ? "8" : req.query.limit;
+  if (typeof rawLimit !== "string" || !/^\d+$/.test(rawLimit) || Number(rawLimit) < 1 || Number(rawLimit) > 20) {
+    return res.status(400).json({ success: false, message: "Activity limit must be between 1 and 20." });
+  }
+  const values = [...inquiryScope.values, Number(rawLimit)];
+  const scope = inquiryScope.clause ? `AND ${inquiryScope.clause}` : "";
+  const limitParameter = `$${values.length}`;
+  try {
+    const result = await pool.query(
+      `SELECT h.id, h.inquiry_id, h.action, h.old_value, h.new_value, h.created_at,
+              i.customer_name, i.assigned_to, assigned.full_name AS assigned_staff_name,
+              actor.full_name AS changed_by_name
+       FROM inquiry_history h
+       JOIN inquiries i ON i.id = h.inquiry_id
+       LEFT JOIN users assigned ON assigned.id = i.assigned_to
+       LEFT JOIN users actor ON actor.id = h.changed_by
+       WHERE TRUE ${scope}
+       ORDER BY h.created_at DESC, h.id DESC
+       LIMIT ${limitParameter}`,
+      values
+    );
+    return res.status(200).json({ success: true, count: result.rows.length, data: result.rows });
+  } catch (error) {
+    console.error("Get Recent Inquiry Activity Error:", error);
+    return res.status(500).json({ success: false, message: "Failed to retrieve inquiry activity." });
+  }
+};
+
 // ==========================================
 // EXPORT ALL CONTROLLERS
 // ==========================================
@@ -827,8 +831,10 @@ const getInquiryHistory = async (req, res) => {
 module.exports = {
   createInquiry,
   getAllInquiries,
+  getInquiryCategories,
   getInquiryById,
   updateInquiryStatus,
   assignInquiry,
-  getInquiryHistory
+  getInquiryHistory,
+  getRecentInquiryActivity
 };
