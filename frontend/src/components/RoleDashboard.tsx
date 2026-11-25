@@ -113,7 +113,7 @@ export default function RoleDashboard({ role, title }: DashboardProps) {
     <main className="dashboard-shell">
       <aside className="dashboard-sidebar">
         <div>
-          <p className="brand-mark">CIS</p>
+          <img className="brand-mark" src="/cofee.png" alt="Customer Inquiry System logo" />
           <p className="brand-name">Customer Inquiry</p>
         </div>
 

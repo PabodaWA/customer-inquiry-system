@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  Bell, ChevronDown, ChevronRight, ClipboardList, Coffee, LayoutDashboard, LogOut,
+  Bell, ChevronDown, ChevronRight, ClipboardList, LayoutDashboard, LogOut,
   PanelLeftClose, PanelLeftOpen, Settings, ShieldCheck, Tags,
   Users, X, UserRoundX,
 } from "lucide-react";
@@ -134,7 +134,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         {mobileOpen && <button className="mobile-nav-backdrop" aria-label="Close navigation" onClick={closeMobileNav} />}
         <aside id="admin-sidebar" ref={sidebarRef} className={`sidebar${mobileOpen ? " sidebar-open" : ""}`} aria-label="Admin sidebar" role={mobileOpen ? "dialog" : undefined} aria-modal={mobileOpen || undefined}>
           <div className="brand-row">
-            <Link className="brand-icon" href="/dashboard/admin" aria-label="Coffee Ninja dashboard"><Coffee size={21} strokeWidth={2.4} /></Link>
+            <Link className="brand-icon" href="/dashboard/admin" aria-label="Customer Inquiry System dashboard"><img src="/cofee.png" alt="" /></Link>
             <span className="brand-copy"><small>INQUIRY PORTAL</small></span>
             <button className="icon-button mobile-close" onClick={closeMobileNav} aria-label="Close navigation"><X size={18}/></button>
           </div>

@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Bell, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, CloudUpload, Coffee, FilePlus2, LayoutDashboard, LogOut, Menu, Settings, X } from "lucide-react";
+import { Bell, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, CloudUpload, FilePlus2, LayoutDashboard, LogOut, Menu, Settings, X } from "lucide-react";
 import ThemeToggle from "../../../../components/ThemeToggle";
 import { apiRequest, inquiryReference, readableLabel, type Inquiry } from "../../../../lib/admin";
 import { useLogout } from "../../../../lib/useLogout";
@@ -107,7 +107,7 @@ export default function NewIntakeInquiryPage() {
     <LogoutFeedback error={logoutError} onRetry={() => void logout()}/>
     {mobileNav && <button className="intake-scrim" aria-label="Close navigation" onClick={() => setMobileNav(false)} />}
     <aside className={`intake-sidebar ${mobileNav ? "is-open" : ""}`}>
-      <Link href="/dashboard/intake" className="intake-brand"><span className="intake-brand-icon"><Coffee size={21}/></span><span><small>INQUIRY PORTAL</small></span><button className="intake-close" aria-label="Close menu" onClick={(event) => { event.preventDefault(); setMobileNav(false); }}><X size={18}/></button></Link>
+      <Link href="/dashboard/intake" className="intake-brand"><span className="intake-brand-icon"><img src="/cofee.png" alt="" /></span><span><small>INQUIRY PORTAL</small></span><button className="intake-close" aria-label="Close menu" onClick={(event) => { event.preventDefault(); setMobileNav(false); }}><X size={18}/></button></Link>
       <div className="intake-nav-label">WORKSPACE</div><nav className="intake-nav" aria-label="Main navigation">
         <Link href="/dashboard/intake"><LayoutDashboard size={18}/>Dashboard</Link><Link href="/dashboard/intake/inquiries"><ClipboardList size={18}/>My created inquiries</Link><Link className="current" aria-current="page" href="/dashboard/intake/new"><FilePlus2 size={18}/>New inquiry</Link><Link href="/dashboard/intake/notifications"><Bell size={18}/>Notifications</Link>
       </nav><div className="intake-nav-label settings-label">PREFERENCES</div><nav className="intake-nav"><Link href="/dashboard/intake/settings"><Settings size={18}/>Settings</Link></nav>

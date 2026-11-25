@@ -1,9 +1,9 @@
-﻿"use client";
+"use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Activity, Bell, CalendarDays, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, ClipboardList, Coffee, Eye, FilePlus2, FilterX, Inbox, LayoutDashboard, LogOut, Menu, Search, Settings, X } from "lucide-react";
+import { Activity, Bell, CalendarDays, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, ClipboardList, Eye, FilePlus2, FilterX, Inbox, LayoutDashboard, LogOut, Menu, Search, Settings, X } from "lucide-react";
 import ThemeToggle from "../../../../components/ThemeToggle";
 import { apiRequest, displayDate, inquiryReference, readableLabel, type Inquiry, type InquiryStatus } from "../../../../lib/admin";
 import { useInquiryRefresh } from "../../../../lib/useInquiryRefresh";
@@ -152,7 +152,7 @@ export default function IntakeInquiriesPage() {
     <LogoutFeedback error={logoutError} onRetry={() => void logout()}/>
     {mobileNav && <button className="intake-scrim" aria-label="Close navigation" onClick={() => setMobileNav(false)} />}
     <aside className={`intake-sidebar ${mobileNav ? "is-open" : ""}`}>
-      <Link href="/dashboard/intake" className="intake-brand"><span className="intake-brand-icon"><Coffee size={21}/></span><span><small>INQUIRY PORTAL</small></span><button className="intake-close" aria-label="Close menu" onClick={(event) => { event.preventDefault(); setMobileNav(false); }}><X size={18}/></button></Link>
+      <Link href="/dashboard/intake" className="intake-brand"><span className="intake-brand-icon"><img src="/cofee.png" alt="" /></span><span><small>INQUIRY PORTAL</small></span><button className="intake-close" aria-label="Close menu" onClick={(event) => { event.preventDefault(); setMobileNav(false); }}><X size={18}/></button></Link>
       <div className="intake-nav-label">WORKSPACE</div>
       <nav className="intake-nav" aria-label="Main navigation">
         <Link href="/dashboard/intake"><LayoutDashboard size={18}/>Dashboard</Link>

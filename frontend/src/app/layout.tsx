@@ -3,8 +3,9 @@ import ThemeProvider from "../components/ThemeProvider";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Coffee Ninja | Customer Inquiry Portal",
-  description: "Manage customer inquiries with Coffee Ninja.",
+  title: "Customer Inquiry System",
+  description: "Manage and track customer inquiries.",
+  icons: { icon: "/cofee.png" },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

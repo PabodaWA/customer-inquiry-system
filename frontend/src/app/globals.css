@@ -407,7 +407,7 @@ button, input { font: inherit; }
   .primary-action { height: 38px; white-space: nowrap; }
 }
 
-/* Coffee Ninja admin workspace */
+/* Customer Inquiry System admin workspace */
 .admin-app {
   --page: var(--background); --panel: var(--surface); --surface-soft: var(--surface-secondary); --ink: var(--foreground);
   --muted: var(--muted-foreground); --line: var(--border); --teal: var(--primary); --teal-dark: var(--primary-hover);
@@ -717,3 +717,63 @@ button, input { font: inherit; }
 .handler-shell.is-collapsed .handler-brand { flex-direction:row;justify-content:center;gap:0;padding:0 0 29px; }
 @media(max-width:760px){.handler-sidebar-toggle{display:none}.handler-shell.is-collapsed{display:block}.handler-shell.is-collapsed .handler-sidebar{align-items:stretch}.handler-shell.is-collapsed .handler-brand{flex-direction:row;justify-content:flex-start;gap:11px;padding:0 3px 12px}.handler-shell.is-collapsed .handler-brand>div{display:grid}.handler-shell.is-collapsed .handler-nav-label,.handler-shell.is-collapsed .handler-preferences-label{display:none}.handler-shell.is-collapsed .handler-nav button{justify-content:flex-start;gap:11px;padding:0 10px;font-size:11px}.handler-shell.is-collapsed .handler-sidebar-bottom{display:none}}
 .handler-confirm-copy{margin:0 0 13px;color:var(--foreground);font-size:11px;line-height:1.55}.handler-confirm-warning{display:flex;align-items:flex-start;gap:9px;padding:11px 12px;border:1px solid color-mix(in srgb,#f59e0b 34%,var(--border));border-radius:8px;background:color-mix(in srgb,#f59e0b 9%,var(--surface));color:var(--foreground);font-size:10px;line-height:1.5}.handler-confirm-warning svg{width:16px;height:16px;flex:0 0 auto;color:#b45309}.dark .handler-confirm-warning svg{color:#fbbf24}.handler-modal-actions .handler-confirm-resolve{border-color:var(--primary);background:var(--primary);color:#fff}.handler-modal-actions .handler-confirm-resolve:disabled{opacity:.55;cursor:wait}
+
+.handler-brand-mark { background:#dcfce7; color:#15803d; }
+.dark .handler-brand-mark { background:#14532d; color:#86efac; }
+
+.brand-icon img { width:28px; height:28px; object-fit:contain; }
+.handler-brand-mark { background:#dcfce7; color:#15803d; }
+.handler-brand-mark img { width:26px; height:26px; object-fit:contain; }
+.dark .handler-brand-mark { background:#14532d; }
+
+.brand-mark { display:block; object-fit:contain; padding:6px; background:#dcfce7; }
+
+.logout-button { color:#b45353; }
+.logout-button:hover { background:#fff1f0; color:#a83232; }
+.logout-link { color:color-mix(in srgb, var(--destructive) 72%, var(--muted-foreground)); }
+.logout-link:hover { color:var(--destructive); background:color-mix(in srgb, var(--destructive) 10%, var(--surface)); }
+.handler-logout { color:color-mix(in srgb, var(--destructive) 72%, var(--muted-foreground)); }
+.handler-logout:hover { color:var(--destructive); background:color-mix(in srgb, var(--destructive) 10%, var(--surface)); }
+.handler-profile-dropdown button:last-child { color:color-mix(in srgb, var(--destructive) 78%, var(--foreground)); }
+.handler-profile-dropdown button:last-child:hover { color:var(--destructive); background:color-mix(in srgb, var(--destructive) 10%, var(--surface)); }
+.profile-menu button { color:color-mix(in srgb, var(--destructive) 78%, var(--foreground)); }
+.profile-menu button:hover { background:color-mix(in srgb, var(--destructive) 10%, var(--surface)); }
+
+/* Align the handler workspace with the intake and admin dashboard system. */
+.handler-sidebar { padding:24px 16px 15px; background:var(--sidebar); }
+.handler-brand { gap:11px; padding:0 8px 29px; }
+.handler-brand-mark { width:39px; height:39px; border-radius:12px; }
+.handler-brand small,.handler-nav-label,.handler-kicker { font-size:10px; letter-spacing:.13em; }
+.handler-nav-label { margin:0 10px 10px; }
+.handler-nav { gap:4px; }
+.handler-nav button,.handler-logout { min-height:43px; height:43px; gap:12px; padding:0 12px; border-radius:8px; font-size:13px; font-weight:600; }
+.handler-nav svg,.handler-logout svg { width:18px; height:18px; }
+.handler-nav button.active { font-weight:700; }
+.handler-profile { padding:14px 5px 3px; }
+.handler-profile>span { width:35px; height:35px; }
+.handler-profile strong { font-size:11px; }
+.handler-profile small { font-size:10px; }
+.handler-main { padding:27px clamp(18px,3.4vw,34px) 17px; }
+.handler-topbar { margin-bottom:22px; }
+.handler-topbar p { font-size:9px; }
+.handler-topbar h1 { font-size:25px; }
+.handler-global-search { height:36px; border-radius:8px; font-size:11px; }
+.handler-global-search input { font-size:11px; }
+.handler-theme { width:36px; height:36px; border-radius:8px; }
+.handler-stats { gap:14px; margin-bottom:19px; }
+.handler-stats article { min-height:137px; display:grid; grid-template-columns:1fr; align-content:start; gap:0; padding:15px 16px 12px; border-radius:9px; box-shadow:0 3px 10px #0f172a06; }
+.hs-icon { width:34px; height:34px; margin-bottom:12px; border-radius:8px; }
+.handler-stats article>div { gap:4px; }
+.handler-stats small { font-size:10px; }
+.handler-stats strong { margin-top:0; font-size:24px; }
+.handler-stats em { margin-top:5px; font-size:10px; }
+.handler-list { border-radius:9px; }
+.handler-list-head { padding:18px 19px 13px; }
+.handler-list-head h2 { font-size:16px; }
+.handler-list-head p { font-size:11px; }
+.handler-filters { gap:8px; padding:0 18px 14px; }
+.handler-filters select,.handler-search { height:36px; font-size:11px; }
+.handler-table th { padding:11px 12px; font-size:9px; }
+.handler-table td { padding:13px 12px; font-size:11px; }
+.handler-pagination { padding:12px 18px; font-size:10px; }
+@media(max-width:760px) { .handler-stats article { min-height:126px; padding:12px; } .handler-stats strong { font-size:21px; } .handler-nav button { min-height:36px; height:36px; padding:0 10px; font-size:11px; } .handler-main { padding:19px 14px; } }
