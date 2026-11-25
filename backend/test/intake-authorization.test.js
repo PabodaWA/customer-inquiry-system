@@ -89,6 +89,17 @@ test("admins cannot bypass the handler status workflow", async () => {
   assert.equal(response.statusCode, 403);
 });
 
+test("handlers must use the dedicated status workflow actions", async () => {
+  const response = mockResponse();
+  await controller.updateInquiryStatus({
+    ...intakeRequest(),
+    session: { user: { id: 8, role: "HANDLER" } },
+    body: { status: "RESOLVED" },
+  }, response);
+  assert.equal(response.statusCode, 403);
+  assert.equal(response.body.message, "Use the handler workflow actions to update this inquiry.");
+});
+
 test("unauthorized handlers cannot create inquiries", async () => {
   const response = mockResponse();
   await controller.createInquiry({ session: { user: { id: 8, role: "HANDLER" } }, body: {} }, response);

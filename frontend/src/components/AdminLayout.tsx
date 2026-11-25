@@ -111,6 +111,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const contextValue = useMemo(() => user ? { user } : null, [user]);
 
   async function logout() {
+    setProfileOpen(false);
     setLogoutError("");
     setLoggingOut(true);
     try { await logoutSession(); router.replace("/"); }

@@ -103,14 +103,25 @@ const createInquiry = async (req, res) => {
   let pictureCount = 0;
   let documentCount = 0;
   for (const file of evidence_files) {
-    if (!file || typeof file.name !== "string" || !file.name.trim() || file.name.trim().length > 255 || typeof file.type !== "string" || !ALLOWED_EVIDENCE_TYPES.has(file.type) || typeof file.data !== "string" || file.data.length > Math.ceil(MAX_EVIDENCE_SIZE / 3) * 4 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(file.data)) {
+    if (!file || typeof file.name !== "string" || !file.name.trim() || file.name.trim().length > 255 || typeof file.type !== "string" || !ALLOWED_EVIDENCE_TYPES.has(file.type) || typeof file.data !== "string" || file.data.length % 4 !== 0) {
       return res.status(400).json({ success: false, message: "Evidence files must be supported images or documents." });
+    }
+    if (file.data.length > Math.ceil(MAX_EVIDENCE_SIZE / 3) * 4) {
+      return res.status(400).json({ success: false, message: "Each evidence file must be 5 MB or smaller." });
+    }
+    const paddingLength = file.data.endsWith("==") ? 2 : file.data.endsWith("=") ? 1 : 0;
+    const decodedSize = file.data.length / 4 * 3 - paddingLength;
+    if (decodedSize > MAX_EVIDENCE_SIZE) {
+      return res.status(400).json({ success: false, message: "Each evidence file must be 5 MB or smaller." });
     }
     if (file.type.startsWith("image/")) pictureCount += 1;
     else documentCount += 1;
     if (pictureCount > 3 || documentCount > 3) return res.status(400).json({ success: false, message: "Attach up to 3 pictures and 3 documents." });
     const buffer = Buffer.from(file.data, "base64");
-    if (!buffer.length || buffer.length > MAX_EVIDENCE_SIZE) return res.status(400).json({ success: false, message: "Each evidence file must be 5 MB or smaller." });
+    if (buffer.toString("base64") !== file.data) {
+      return res.status(400).json({ success: false, message: "Evidence files must be supported images or documents." });
+    }
+    if (!buffer.length) return res.status(400).json({ success: false, message: "Each evidence file must be 5 MB or smaller." });
     filesToSave.push({ name: file.name.trim(), type: file.type, buffer });
   }
 
@@ -531,176 +542,24 @@ const getInquiryById = async (req, res) => {
 // ==========================================
 
 const updateInquiryStatus = async (req, res) => {
-
   const user = getCurrentUser(req);
-
-  const { id } = req.params;
-
-  const { status } = req.body;
 
   // Admins review status but do not change it; status changes happen through handler workflow actions.
   if (user.role === "ADMIN") {
     return res.status(403).json({ success: false, message: "Admins can view inquiry status but cannot change it." });
   }
 
-  if (user.role !== "HANDLER") {
+  if (user.role === "HANDLER") {
     return res.status(403).json({
       success: false,
-      message: "You cannot update inquiry status."
+      message: "Use the handler workflow actions to update this inquiry."
     });
   }
 
-  if (user.role === "HANDLER") {
-    return res.status(403).json({ success: false, message: "Use the handler workflow actions to update this inquiry." });
-  }
-
-  if (!isValidId(id)) {
-    return res.status(400).json({
-      success: false,
-      message: "Invalid inquiry ID."
-    });
-  }
-
-  if (!VALID_STATUSES.includes(status)) {
-    return res.status(400).json({
-      success: false,
-      message: "Invalid inquiry status."
-    });
-  }
-
-  let client;
-
-  try {
-
-    client = await pool.connect();
-
-    await client.query("BEGIN");
-
-    // Lock inquiry row
-    const result = await client.query(
-      `SELECT *
-       FROM inquiries
-       WHERE id = $1
-       FOR UPDATE`,
-      [id]
-    );
-
-    if (result.rows.length === 0) {
-
-      await client.query("ROLLBACK");
-
-      return res.status(404).json({
-        success: false,
-        message: "Inquiry not found."
-      });
-
-    }
-
-    const inquiry = result.rows[0];
-
-    // Check permission
-    if (!canAccessInquiry(user, inquiry)) {
-
-      await client.query("ROLLBACK");
-
-      return res.status(403).json({
-        success: false,
-        message: "You cannot update this inquiry."
-      });
-
-    }
-
-    const oldStatus = inquiry.status;
-
-    // Allowed status transitions
-    const allowedTransitions = {
-      NEW: ["IN_PROGRESS"],
-      IN_PROGRESS: ["RESOLVED"],
-      RESOLVED: ["IN_PROGRESS"]
-    };
-
-    // Check same status
-    if (oldStatus === status) {
-
-      await client.query("ROLLBACK");
-
-      return res.status(200).json({
-        success: true,
-        message: "Inquiry already has this status.",
-        data: inquiry
-      });
-
-    }
-
-    // Validate status transition
-    if (!allowedTransitions[oldStatus]?.includes(status)) {
-
-      await client.query("ROLLBACK");
-
-      return res.status(400).json({
-        success: false,
-        message: `Cannot change status from ${oldStatus} to ${status}.`
-      });
-
-    }
-
-    // Update inquiry
-    const updated = await client.query(
-      `UPDATE inquiries
-       SET status = $1,
-           updated_at = CURRENT_TIMESTAMP
-       WHERE id = $2
-       RETURNING *`,
-      [status, id]
-    );
-
-    // Record status history
-    await client.query(
-      `INSERT INTO inquiry_history
-       (
-         inquiry_id,
-         changed_by,
-         action,
-         old_value,
-         new_value
-       )
-       VALUES ($1, $2, $3, $4, $5)`,
-      [
-        id,
-        user.id,
-        "STATUS_CHANGED",
-        oldStatus,
-        status
-      ]
-    );
-
-    await client.query("COMMIT");
-
-    return res.status(200).json({
-      success: true,
-      message: "Inquiry status updated successfully.",
-      data: updated.rows[0]
-    });
-
-  } catch (error) {
-
-    if (client) {
-      await client.query("ROLLBACK");
-    }
-
-    console.error("Update Status Error:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Failed to update inquiry status."
-    });
-
-  } finally {
-
-    client?.release();
-
-  }
-
+  return res.status(403).json({
+    success: false,
+    message: "You cannot update inquiry status."
+  });
 };
 
 
