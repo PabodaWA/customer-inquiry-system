@@ -1,33 +1,40 @@
 # Design Decisions
 
-## Assumptions
+## 1. Assumptions
 
-Intake staff are responsible for registering customer inquiries; handlers work only on inquiries assigned to them; admins manage staff, categories, and reassignment.
+- Intake staff are responsible for registering customer inquiries, while handlers work on inquiries assigned to them. Administrators manage staff, categories, and inquiry reassignment.
+- Each inquiry should be assigned to an active handler whose specialization matches the inquiry category. If no suitable handler is available, the inquiry remains pending until an administrator takes action.
+- Inquiry history and uploaded evidence should remain accessible only to users who have permission to view the relevant inquiry.
+- The application should support initialization using a new, empty PostgreSQL database through the provided baseline schema migration.
 
-An inquiry should be routed to an active handler whose specialization matches its category. If none is available, the inquiry remains pending for later admin action.
+## 2. Design Choices
 
-Inquiry history and evidence need to remain available to users authorized to view that inquiry.
+### 2.1 Backend-Enforced Authorization
 
-The repository includes a baseline PostgreSQL schema migration that allows a developer to initialize the application using a new empty database.
+Role-based access control and inquiry ownership checks are enforced through the backend API rather than relying only on frontend restrictions. Access to inquiry lists, details, evidence, and history is limited according to the authenticated user's role and relationship to the inquiry. This helps prevent unauthorized access, including attempts to access records through direct API requests.
 
-## Design choices
+### 2.2 Workload-Based Automatic Assignment
 
-### 1. Enforce role and ownership checks in the API
+Automatic assignment selects an active handler whose specialization matches the inquiry category. Among eligible handlers, the system prioritizes the handler with the lowest number of active inquiries across categories. If multiple handlers have equal workloads, a per-category rotation mechanism determines the next assignment. This approach aims to distribute work fairly and consistently.
 
-The API scopes list, detail, evidence, and history access to the signed-in user's role and relationship to each inquiry. Handler workflow endpoints also check that the inquiry is assigned to that handler and is in the expected state. The frontend can guide the workflow, but the API is the authority for access decisions.
+### 2.3 Assignment Tracking and Inquiry History
 
-### 2. Assign by active workload, then rotate ties
+The current handler assignment is maintained in the inquiry record, while the `inquiry_assignments` table stores assignment attempts and their outcomes. The `inquiry_history` table records important workflow events and status changes. This separation makes it easier to identify the current inquiry state while maintaining a record of previous actions.
 
-Automatic assignment chooses an active handler for the inquiry category with the lowest count of active inquiries across categories. When handlers have equal workloads, a per-category cursor rotates the next selection. This balances overall work while giving equal-load handlers a predictable turn.
+## 3. Accepted Trade-off
 
-### 3. Keep assignment events and inquiry history
+Uploaded evidence files are validated and stored as binary data in PostgreSQL, then returned to authorized clients as data URLs. This approach keeps inquiry information and its attachments within the same database and avoids introducing an additional file storage service. However, it can increase database size and API response payloads. To reduce this impact, file uploads are restricted by file type, count, and size.
 
-The current assignment lives on the inquiry, while `inquiry_assignments` preserves each assignment attempt and its outcome. `inquiry_history` records broader workflow events. This allows the app to show the current state without losing the path that led there.
+## 4. Future Improvements
 
-## Accepted trade-off
+- Introduce integration tests using a disposable PostgreSQL database to verify the complete inquiry lifecycle, authentication, authorization, and database transactions.
+- Make the backend CORS origin configurable through environment variables to simplify deployment across different environments.
+- Expand frontend test coverage to include important staff workflows such as login, inquiry creation, and status updates.
 
-Evidence files are validated and stored in PostgreSQL as binary data, then returned to authorized clients as data URLs. This keeps inquiry details and their attachments together and avoids adding a separate storage service. The trade-off is database growth and larger API payloads, so uploads are limited by type, count, and size.
+## 5. AI Usage
 
-## What I would improve next
+AI tools were used as development assistance for reviewing implementation approaches, troubleshooting errors, improving code structure, and refining technical documentation. AI suggestions were reviewed before being applied rather than accepted blindly.
 
-I would add integration tests against a disposable PostgreSQL database to verify the complete inquiry lifecycle, authentication, authorization, and database transactions. I would also make the backend CORS origin configurable through environment variables to simplify deployment. Additionally, I would expand frontend tests to cover the main staff workflows, including login, inquiry creation, and status updates.
+One suggestion I accepted was to enforce authentication and authorization checks at the backend API level instead of relying only on frontend restrictions. This decision helps ensure that protected resources remain secure even when users attempt to bypass the interface.
+
+All implementation decisions were reviewed against the application's requirements, and I remain responsible for understanding and explaining the submitted code.
