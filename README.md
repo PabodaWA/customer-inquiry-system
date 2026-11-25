@@ -1,4 +1,4 @@
-# Coffee Ninja Customer Inquiry System
+# Customer Inquiry System
 
 A role based customer inquiry portal for registering customer requests, routing work to the right handler, and tracking each inquiry through resolution.
 
@@ -29,7 +29,7 @@ The repository contains a **Next.js frontend** and an **Express/PostgreSQL API**
 ```text
 backend/
   src/controllers/       API request handlers
-  src/db/migrations/     Incremental database changes
+  src/db/migrations/     Database schema setup
   src/middleware/        Authentication and role checks
   src/routes/            API route definitions
   src/services/          Assignment and access-control logic
@@ -42,21 +42,25 @@ frontend/
 
 ## Requirements
 
-- Node.js and npm
-- PostgreSQL
-- A baseline application database schema
+- Node.js 20.9 or newer, with npm
+- PostgreSQL (local installation or a reachable PostgreSQL server)
+- Git, or a downloaded copy of this repository
 
 ### Database setup note
 
-The SQL files in `backend/src/db/migrations` add inquiry categories, handler workflow data, evidence storage, and history actions. **They are not a complete first-install schema.** They expect the core `users`, `inquiries`, and `inquiry_history` tables to exist already. The assignment service also expects an `assignment_state` table. Those base-table definitions are not included in this repository, so create or restore the baseline schema before running the migrations.
+The project has one SQL schema file: `backend/src/db/migrations/000_baseline_schema.sql`. The migration command creates the application tables automatically. You only need to create an empty PostgreSQL database first; do not paste the SQL into pgAdmin separately.
 
 ## Local setup
 
-Run the backend and frontend in separate terminals.
+Get a copy of the repository, install PostgreSQL and Node.js, then follow these steps. Keep the backend and frontend running in separate terminals.
 
-### 1. Configure PostgreSQL and the backend
+### 1. Create an empty PostgreSQL database
 
-Create a PostgreSQL database and make sure the baseline tables described above are present. In `backend/`, create a `.env` file:
+In pgAdmin, connect to your PostgreSQL server, right-click **Databases**, choose **Create > Database**, and name it `customer_inquiry_system`. Leave it empty. You can use another database name, but use the same name in the `.env` file below.
+
+### 2. Configure and start the backend
+
+In the `backend/` folder, create a file named `.env` (not `.env.txt`) and put in your PostgreSQL connection details. Replace `your_local_database_password` with the password for your PostgreSQL user. Set `SESSION_SECRET` to a long, random value.
 
 ```dotenv
 DB_HOST=localhost
@@ -69,7 +73,7 @@ PORT=5000
 NODE_ENV=development
 ```
 
-Install dependencies, apply the included migrations, and start the API:
+Open a terminal at the repository root and run:
 
 ```bash
 cd backend
@@ -78,18 +82,18 @@ npm run db:migrate
 npm run dev
 ```
 
-The API listens on `http://localhost:5000` by default. Check that it is running at [http://localhost:5000/api/health](http://localhost:5000/api/health).
+`npm run db:migrate` creates all application tables from the single SQL file. It records completed migrations, so it skips a migration that has already been applied. The API listens on `http://localhost:5000`; check it at [http://localhost:5000/api/health](http://localhost:5000/api/health). Keep this terminal open.
 
-### 2. Add local demo accounts (optional)
+### 3. Add local demo accounts
 
-After the baseline schema and migrations are ready, this script inserts sample staff accounts:
+The application does not have a public sign-up page. For a local demo, open a second terminal at the repository root and run this after the migration succeeds:
 
 ```bash
 cd backend
 node src/seed/seedUsers.js
 ```
 
-The seed script contains fixed demo passwords and uses `ON CONFLICT DO NOTHING`; use it only with a local or disposable database. Change or remove the sample credentials before exposing the app to others.
+The script inserts sample staff accounts and does not overwrite accounts with matching emails. If you already have accounts in the database, you can skip this step. These fixed demo passwords are for local development only; do not expose the app with these accounts enabled.
 
 | Role | Email | Demo password |
 | --- | --- | --- |
@@ -100,15 +104,15 @@ The seed script contains fixed demo passwords and uses `ON CONFLICT DO NOTHING`;
 | Repair handler | `repair@example.com` | `Repair@123` |
 | Billing handler | `billing@example.com` | `Billing@123` |
 
-### 3. Configure and start the frontend
+### 4. Configure and start the frontend
 
-In `frontend/`, create `.env.local` if the API is not at the default URL:
+The frontend defaults to the local API URL, so no frontend environment file is needed for a standard local setup. If your API runs at a different address, create `frontend/.env.local`:
 
 ```dotenv
 NEXT_PUBLIC_API_URL=http://localhost:5000
 ```
 
-Then install dependencies and start Next.js:
+In a third terminal, run:
 
 ```bash
 cd frontend
@@ -116,7 +120,7 @@ npm ci
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) and sign in with one of the demo accounts or an account in your database.
+Open [http://localhost:3000](http://localhost:3000) and sign in with one of the demo accounts above, or with an account already in your database.
 
 ## Environment variables
 
@@ -131,6 +135,14 @@ Open [http://localhost:3000](http://localhost:3000) and sign in with one of the 
 | `PORT` | Backend | No | API port; defaults to `5000` |
 | `NODE_ENV` | Backend | No | Set to `production` to mark the session cookie secure |
 | `NEXT_PUBLIC_API_URL` | Frontend | No | API base URL; defaults to `http://localhost:5000` |
+
+## Troubleshooting
+
+- **Database connection refused:** Make sure PostgreSQL is running and `DB_HOST` and `DB_PORT` point to it.
+- **Password authentication failed:** Check `DB_USER` and `DB_PASSWORD` in `backend/.env`.
+- **Database does not exist:** Create the empty database in pgAdmin and make sure its name matches `DB_NAME`.
+- **Login fails after setup:** Run the demo-account seed command above, or use an account that already exists in the database.
+- **Port already in use:** Stop the other process using port `5000` (API) or `3000` (frontend), then start the project again.
 
 ## Role workflows
 
@@ -181,7 +193,7 @@ cd backend
 npm run dev       # Start API with nodemon
 npm start         # Start API normally
 npm test          # Run backend tests
-npm run db:migrate # Apply SQL migrations in filename order
+npm run db:migrate # Create the database schema (first setup)
 ```
 
 ### Frontend
